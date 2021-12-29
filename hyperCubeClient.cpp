@@ -1,23 +1,38 @@
 #include <stdio.h>
 
+#include "Logger.h"
 #include "hyperCubeClient.h"
 #include "Common.h"
 #include "Packet.h"
 #include "mserdes.h"
 #include "kbhit.h"
 #include "clockGetTime.h"
-#include "Logger.h"
 
 #include "json.hpp"
 using json = nlohmann::json;
 
 using namespace std;
 
+#ifdef _WIN64
+void usleep(__int64 usec)
+{
+    HANDLE timer;
+    LARGE_INTEGER ft;
+
+    ft.QuadPart = -(10 * usec); // Convert to 100 nanosecond interval, negative value indicates relative time
+
+    timer = CreateWaitableTimer(NULL, TRUE, NULL);
+    SetWaitableTimer(timer, &ft, 0, NULL, NULL, 0);
+    WaitForSingleObject(timer, INFINITE);
+    CloseHandle(timer);
+}
+#endif
+
 HyperCubeClient::HyperCubeClient() :
     recvPacketBuilder(*this, COMMON_PACKETSIZE_MAX),
     threadSafeWritePacketBuilder(COMMON_PACKETSIZE_MAX)
 {
-    std::srand(std::time(nullptr));
+    std::srand((unsigned int)std::time(nullptr));
     systemId = std::rand();
 };
 
@@ -140,9 +155,9 @@ bool HyperCubeClient::doEchoTest(void)
         totalTime += cgt.change();
         printRcvdMsgCmds(command);
     }
-    totalTests += numTests;
+    totalTests += (int)numTests;
     double avgTime = (totalTime/totalTests)*1000000;
-    double avgBytes = (totalBytesSent/totalTests);
+    double avgBytes = ((double)totalBytesSent/(double)totalTests);
     double totalBPS = ((double) (totalBytesSent*8) / totalTime)/1000000.0;
     LOG_INFOD("HyperCubeClient::doEchoTest()", "Avg time per test (us): " + std::to_string(avgTime), 0);
     LOG_INFOD("HyperCubeClient::doEchoTest()", "Avg bytes per test : " + std::to_string((int)avgBytes), 0);
