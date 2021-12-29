@@ -30,3 +30,7 @@
 *.exe
 *.out
 *.app
+*.tlog
+*.log
+
+backChannelClientWin/x64/

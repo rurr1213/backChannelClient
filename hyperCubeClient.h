@@ -1,6 +1,6 @@
-// test file
 #include <stdio.h>
 #include <queue>
+
 #include "tcp.h"
 #include "Messages.h"
 #include "mserdes.h"
@@ -44,9 +44,7 @@ class HyperCubeClient : public RecvPacketBuilder::IReadDataObject// hyper cube c
         bool recvMsg(Msg& msg);
 
         bool connect(std::string _serverIpAddress);
-        bool doShell(void);
 
-        bool doEchoTest(void);
         bool printRcvdMsgCmds(std::string sentString);
         bool processInputMsgs(std::string sentString);
 };

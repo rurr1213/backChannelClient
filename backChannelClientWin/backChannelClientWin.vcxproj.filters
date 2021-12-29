@@ -27,15 +27,18 @@
     <ClInclude Include="..\hyperCubeClient.h">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\backChannelClient.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="backChannelClientWin.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="pch.cpp">
+    <ClCompile Include="..\hyperCubeClient.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
-    <ClCompile Include="..\hyperCubeClient.cpp">
+    <ClCompile Include="..\backChannelClient.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
