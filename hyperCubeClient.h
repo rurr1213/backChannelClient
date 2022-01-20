@@ -15,8 +15,6 @@ class HyperCubeClient : public RecvPacketBuilder::IReadDataObject// hyper cube c
         RecvPacketBuilder recvPacketBuilder;
         WritePacketBuilder threadSafeWritePacketBuilder;
         std::deque<Packet::UniquePtr> inPacketQ;
-        bool sendPacket(Packet::UniquePtr& ppacket);
-        bool recvPackets(void);
         virtual int readData(void* pdata, int dataLen);
         MSerDes mserdes;
         std::unique_ptr<Packet> pinputPacket = 0;
@@ -31,8 +29,10 @@ class HyperCubeClient : public RecvPacketBuilder::IReadDataObject// hyper cube c
         bool sendEcho(void);
 
         uint64_t systemId;
-
-    public:
+    protected:
+        bool sendPacket(Packet::UniquePtr& ppacket);
+        bool recvPackets(void);
+public:
         HyperCubeClient();
         ~HyperCubeClient();
 
@@ -44,6 +44,8 @@ class HyperCubeClient : public RecvPacketBuilder::IReadDataObject// hyper cube c
         bool recvMsg(Msg& msg);
 
         bool connect(std::string _serverIpAddress);
+        SOCKET getSocket(void) { return client.getSocket(); }
+        bool socketValid(void) { return client.socketValid(); }
 
         bool printRcvdMsgCmds(std::string sentString);
         bool processInputMsgs(std::string sentString);
