@@ -3,7 +3,7 @@
 
 #define BACKCHANNEL_CONNECTIONINTERVAL_MS 10000			// connection attempt interval in milliseconds
 
-#define BACKCHANNEL_SERVER_IP "127.0.0.1"
+#define BACKCHANNEL_SERVER_IP "192.168.1.215"
 
 class BackChannelClient : public HyperCubeClient, IwthreadObject
 {
@@ -15,6 +15,7 @@ class BackChannelClient : public HyperCubeClient, IwthreadObject
 	virtual bool threadFunction(void);
 	bool connectIfNotConnected(void);
 	bool processConnectionEvents(void);
+	bool setupConnection(void);
 	bool readPackets(void);
 	bool writePackets(void);
 	bool connectionClosed(void);
@@ -22,6 +23,7 @@ public:
 	BackChannelClient();
 	~BackChannelClient();
 	bool init(void);
+	bool setIP(std::string ipAddress);
 	bool deinit(void);
 };
 

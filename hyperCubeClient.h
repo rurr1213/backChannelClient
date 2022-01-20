@@ -23,13 +23,14 @@ class HyperCubeClient : public RecvPacketBuilder::IReadDataObject// hyper cube c
         double totalTime = 0;
         std::string dataString;
 
+
+        uint64_t systemId;
+    protected:
         bool createGroup(std::string _groupName);
         bool publish(void);
         bool subscribe(void);
         bool sendEcho(void);
 
-        uint64_t systemId;
-    protected:
         bool sendPacket(Packet::UniquePtr& ppacket);
         bool recvPackets(void);
 public:
@@ -49,5 +50,6 @@ public:
 
         bool printRcvdMsgCmds(std::string sentString);
         bool processInputMsgs(std::string sentString);
+
 };
 

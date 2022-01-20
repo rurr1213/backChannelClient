@@ -162,7 +162,7 @@ bool HyperCubeClient::sendEcho(void)
         { "data", echoData }
     };
 
-    cout << "Send Echo " << echoData << "\n";
+    //cout << "Send Echo " << echoData << "\n";
     string command = j.dump();
     MsgCmd msgCmd(command);
     return sendMsg(msgCmd);
@@ -180,10 +180,10 @@ bool HyperCubeClient::publish(void)
         { "groupId", _groupId }
     };
 
-    cout << to_string(systemId);
+    //cout << to_string(systemId);
     command = j.dump();
 
-    cout << "Send Publish sid:" << to_string(systemId) << " gid:" << to_string(_groupId) << "\n";
+    //cout << "Send Publish sid:" << to_string(systemId) << " gid:" << to_string(_groupId) << "\n";
 
     SigMsg signallingMsg(command);
     return sendMsg(signallingMsg);
@@ -198,9 +198,8 @@ bool HyperCubeClient::createGroup(std::string _groupName)
         { "groupName", _groupName }
     };
 
-    cout << "Send CreateGroup sid:" << to_string(systemId) << " gin:" << _groupName << "\n";
-
-    cout << to_string(systemId);
+    //cout << "Send CreateGroup sid:" << to_string(systemId) << " gin:" << _groupName << "\n";
+    //cout << to_string(systemId);
     command = j.dump();
 
     SigMsg signallingMsg(command);
@@ -219,11 +218,95 @@ bool HyperCubeClient::subscribe(void)
         { "groupId", _groupId }
     };
 
-    cout << "Send Subscribe sid:" << to_string(systemId) << " gid:" << to_string(_groupId) << "\n";
+    //cout << "Send Subscribe sid:" << to_string(systemId) << " gid:" << to_string(_groupId) << "\n";
     command = j.dump();
     SigMsg signallingMsg(command);
     return sendMsg(signallingMsg);
 }
 
+/*
+bool HyperCubeClient::doShell(void)
+{
+    client.init();
+
+    if (!client.connect(serverIpAddress, SERVER_PORT)) {
+        std::cout << "HyperCubeClient(): Server not available\n\r";
+        return false;
+    }
+    bool exitNow = false;
+
+    std::cout << "Client Interactive Mode\n\r";
+    cout << "q/ESC - quit, x - exit, e - echo, s - send, r - recv, l - echo loop\n\r";
+#ifdef _WIN64
+    DWORD processID = GetCurrentProcessId();
+    cout << "ProcessId: " << processID << endl;
+#endif
+
+    std::string dataString = "Hi There:";
+
+    Msg inMsg;
+    int msgNum = 0;
+
+    while (!exitNow) {
+        if (kbhit()) {
+            char ch = getchar();
+            switch (ch) {
+            case 27:
+            case 'q':
+                exitNow = true;
+                break;
+            case 'p':
+                publish();
+                break;
+            case 's':
+                subscribe();
+                break;
+            case 'c':
+                createGroup("Test groupName ");
+                break;
+            case 'r':
+            {
+                cout << "Sent SEND\n";
+                string command = "SEND "; command += dataString + std::to_string(msgNum++);
+                MsgCmd cmdMsg(command);
+                sendMsg(cmdMsg);
+            }
+            break;
+            case 'e':
+                sendEcho();
+                break;
+            case 'x':
+            {
+                exitNow = true;
+                MsgCmd cmdMsg("EXIT");
+                sendMsg(cmdMsg);
+                usleep(100000);
+            }
+            break;
+            case 'l':
+            {
+                string command = "ECHO"; command += to_string(100) + ",";
+                while (true) {
+                    MsgCmd cmdMsg(command);
+                    sendMsg(cmdMsg);
+                    usleep(100000);
+                }
+            }
+            break;
+            }
+
+        }
+
+        recvPackets();
+
+        printRcvdMsgCmds("");
+
+        usleep(10000);
+    }
+
+    client.deinit();
+    return true;
+}
 
 
+*/

@@ -42,6 +42,12 @@ bool BackChannelClient::deinit(void)
 	return true;
 }
 
+bool BackChannelClient::setIP(std::string ipAddress)
+{
+	serverIpAddress = ipAddress;
+	return true;
+}
+
 bool BackChannelClient::connectIfNotConnected(void)
 {
 	bool stat = true;
@@ -51,9 +57,11 @@ bool BackChannelClient::connectIfNotConnected(void)
 			connectionAttempts = 0;
 		}
 		stat = connect(serverIpAddress);
-		if (stat)
-			LOG_INFOD("BackChannelClient::connectIfNotConnected()","connected to " + serverIpAddress, 0);
-		else 
+		if (stat) {
+			LOG_INFOD("BackChannelClient::connectIfNotConnected()", "connected to " + serverIpAddress, 0);
+			setupConnection();
+		} 
+		else
 			LOG_WARNING("BackChannelClient::connectIfNotConnected()", "connection failed to " + serverIpAddress, 0);
 		connectionAttempts++;
 	}
@@ -65,17 +73,26 @@ bool BackChannelClient::threadFunction(void)
 	LOG_INFO("BackChannelClient::threadFunction(), ThreadStarted", 0);
 	while (!stdThread.checkIfShouldExit()) {
 		if (connectIfNotConnected())
-			processConnectionEvents();
+			if (!processConnectionEvents()) {
+				Sleep(1000);
+			}
 	}
 	stdThread.exiting();
+	return true;
+}
+
+bool BackChannelClient::setupConnection(void)
+{
+	createGroup("Matrix group");
+	sendEcho();
 	return true;
 }
 
 bool BackChannelClient::processConnectionEvents(void)
 {
 	struct pollfd pollFds[1];
-	memset(pollFds, 0, 1);
-	int numFds = 0;
+	memset(pollFds, 0, sizeof(pollfd));
+	int numFds = 1;
 
 	pollFds[0].fd = getSocket();
 	LOG_ASSERT(pollFds[0].fd > 0);
