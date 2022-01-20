@@ -2,6 +2,8 @@
 
 #include "Logger.h"
 #include <Winsock2.h> // before Windows.h, else Winsock 1 conflict
+#include <errno.h>
+
 #include "backChannelClient.h"
 
 #include "json.hpp"
@@ -15,7 +17,9 @@ using namespace std;
 #endif
 
 BackChannelClient::BackChannelClient() :
-	HyperCubeClient(), CstdThread(this)
+	HyperCubeClient(), 
+	stdThread(this),
+	serverIpAddress{ BACKCHANNEL_SERVER_IP }
 {
 }
 
@@ -25,34 +29,45 @@ BackChannelClient::~BackChannelClient()
 
 bool BackChannelClient::init(void)
 {
-	checkConnection();
+	stdThread.init();
+	stdThread.start();
 	return true;
 }
 
 bool BackChannelClient::deinit(void)
 {
+	stdThread.setShouldExit();
+	stdThread.stop();
+	stdThread.deinit();
 	return true;
 }
 
-bool BackChannelClient::checkConnection(void)
+bool BackChannelClient::connectIfNotConnected(void)
 {
+	bool stat = true;
 	if (!socketValid()) {
-		if (connectionAttempts++ > 0) {
-			Sleep(10000);
+		if (connectionAttempts > 0) {
+			Sleep(BACKCHANNEL_CONNECTIONINTERVAL_MS);
+			connectionAttempts = 0;
 		}
-		connect(serverIpAddress);
+		stat = connect(serverIpAddress);
+		if (stat)
+			LOG_INFOD("BackChannelClient::connectIfNotConnected()","connected to " + serverIpAddress, 0);
+		else 
+			LOG_WARNING("BackChannelClient::connectIfNotConnected()", "connection failed to " + serverIpAddress, 0);
+		connectionAttempts++;
 	}
-	return true;
+	return stat;
 }
 
 bool BackChannelClient::threadFunction(void) 
 {
-	LOG_INFO("recvThreadStarted", 0);
-	while (!checkIfShouldExit()) {
-		if (checkConnection())
+	LOG_INFO("BackChannelClient::threadFunction(), ThreadStarted", 0);
+	while (!stdThread.checkIfShouldExit()) {
+		if (connectIfNotConnected())
 			processConnectionEvents();
 	}
-	exiting();
+	stdThread.exiting();
 	return true;
 }
 
@@ -63,6 +78,7 @@ bool BackChannelClient::processConnectionEvents(void)
 	int numFds = 0;
 
 	pollFds[0].fd = getSocket();
+	LOG_ASSERT(pollFds[0].fd > 0);
 	pollFds[0].events = POLLOUT | POLLIN;
 	pollFds[0].revents = 0;
 
@@ -73,7 +89,10 @@ bool BackChannelClient::processConnectionEvents(void)
 	/// So, we timeout every 1 second, so that if any new sockets are added during a poll that is blocked, it will exit and 
 	/// come around again with the new socket added in pollFds.
 	int res = poll(pollFds, numFds, 1000);
-
+	if (res < 0) {
+		LOG_WARNING("BackChannelClient::processConnectionEvents()", "poll returned - 1", res);
+		return false;
+	}
 	if ((pollFds[0].fd > 0) && (pollFds[0].revents != 0)) { // if not being ignored
 	// check socket index match. It should even if a new connection was added.
 		int revents = pollFds[0].revents;
@@ -84,11 +103,11 @@ bool BackChannelClient::processConnectionEvents(void)
 			writePackets();
 		}
 		if (revents & POLLPRI) {
-			LOG_INFO("poll returned POLLPRI", pollFds[0].revents);
+			LOG_INFO("BackChannelClient::processConnectionEvents(), poll returned POLLPRI", pollFds[0].revents);
 		}
 		if ((revents & POLLHUP) || (revents & POLLERR) || (revents & POLLNVAL)) {
 			connectionClosed();
-			LOG_INFO("TCP connection close", (int)pollFds[0].fd);
+			LOG_INFO("BackChannelClient::processConnectionEvents(), TCP connection close", (int)pollFds[0].fd);
 		}
 	}
 	return true;
