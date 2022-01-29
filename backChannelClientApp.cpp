@@ -13,7 +13,7 @@ int main() {
 	printf("BackChannel Client\n");
 	printf("------------------\n");
 
-    string ipAddress = "127.0.0.1";
+    string ipAddress = "192.168.1.215";
 
     cout << "Connecting to " << ipAddress << endl;
     client.init(ipAddress);

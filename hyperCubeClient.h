@@ -29,6 +29,7 @@ class HyperCubeClient : public RecvPacketBuilder::IReadDataObject// hyper cube c
         bool publish(void);
         bool subscribe(void);
         bool sendEcho(void);
+        bool sendLocalPing(void);
 
         uint64_t systemId;
 

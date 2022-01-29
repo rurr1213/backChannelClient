@@ -205,6 +205,21 @@ bool HyperCubeClient::sendEcho(void)
     return sendMsg(msgCmd);
 }
 
+bool HyperCubeClient::sendLocalPing(void) 
+{
+    std::string pingData = "";
+    json j = {
+        { "command", "localPing" },
+        { "systemId", systemId },
+        { "data", pingData }
+    };
+
+    cout << "Send Local Ping " << pingData << "\n";
+    string command = j.dump();
+    SigMsg msgCmd(command);
+    return sendMsg(msgCmd);
+}
+
 
 bool HyperCubeClient::publish(void) 
 {
@@ -309,6 +324,9 @@ bool HyperCubeClient::doShell(void)
                         MsgCmd cmdMsg(command);
                         sendMsg(cmdMsg);
                     }
+                    break;
+                case 't':
+                    sendLocalPing();
                     break;
                 case 'e':
                     sendEcho();
