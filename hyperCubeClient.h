@@ -8,16 +8,14 @@
 
 #define HYPERCUBE_CONNECTIONINTERVAL_MS 10000			// connection attempt interval in milliseconds
 
-class ISocketObject : public RecvPacketBuilder::IReadDataObject 
+
+class IHyperCubeClientCore 
 {
 public:
-    virtual int readData(void* pdata, int dataLen) = 0;
-    virtual int sendData(const void* pdata, const int dataLen) = 0;
-    virtual bool notifySocketClosed(void) = 0;
-    virtual bool notifyRecvdData(void) = 0;
+    virtual bool sendMsg(Msg& msg) = 0;
 };
 
-class HyperCubeClientCore : public ISocketObject, IwthreadObject
+class HyperCubeClientCore : IHyperCubeClientCore
 {
     private:
 
@@ -30,16 +28,62 @@ class HyperCubeClientCore : public ISocketObject, IwthreadObject
             bool isEmpty(void);
         };
 
-        class SignallingObject {
+        class SignallingObject : CstdThread {
             MSerDes mserdes;
-        public:
-            virtual bool isSignallingMsg(std::unique_ptr<Packet>& rppacket);
+            CstdConditional eventDisconnectedFromServer;
+            std::atomic<bool> connected = false;
+//            std::atomic<int> connectionAttempts = 0;
+
+            Ctcp::Client& rclient;
+            IHyperCubeClientCore* pIHyperCubeClientCore = 0;
+            bool socketValid(void) { return rclient.socketValid(); }
+            bool connect(void);
+            std::string serverIpAddress;
+            bool connectIfNotConnected(void);
             bool processSigMsgJson(const Packet* ppacket);
+            bool threadFunction(void);
+            bool sendMsg(Msg& msg) {
+                return pIHyperCubeClientCore->sendMsg(msg);
+            }
+            bool createGroup(std::string _groupName);
+            bool publish(void);
+            bool subscribe(void);
+            bool sendEcho(void);
+            bool sendLocalPing(void);
+            bool setupConnection(void);
+
+        public:
+            uint64_t systemId;
+
+            SignallingObject(IHyperCubeClientCore* _pIHyperCubeClientCore, Ctcp::Client& _rclient) :
+                pIHyperCubeClientCore{ _pIHyperCubeClientCore },
+                CstdThread(this),
+                rclient{ _rclient } {};
+            void init(std::string _serverIpAddress) {
+                serverIpAddress = _serverIpAddress;
+                if (!isStarted()) {
+                    CstdThread::init(true);
+                    eventDisconnectedFromServer.reset();
+                }
+            }
+            void deinit(void) {
+                if (isStarted()) {
+                    while (!isExited()) {
+                        setShouldExit();
+                        eventDisconnectedFromServer.notify();
+                    }
+                    rclient.close(); // close after thread exits, to avoid reconnecting before exit
+                }
+                CstdThread::deinit(true);
+            }
+            virtual bool isSignallingMsg(std::unique_ptr<Packet>& rppacket);
+            virtual bool notifySocketClosed(void);
+            virtual bool notifyRecvdData(void);
         };
 
-        class RecvActivity : CstdThread {
+        class RecvActivity : CstdThread, RecvPacketBuilder::IReadDataObject {
         private:
-            ISocketObject& rsocketObject;
+            Ctcp::Client& rclient;
             SignallingObject& rsignallingObject;
             RecvPacketBuilder recvPacketBuilder;
             PacketQWithLock inPacketQ;
@@ -47,10 +91,10 @@ class HyperCubeClientCore : public ISocketObject, IwthreadObject
             virtual bool threadFunction(void) {
                 while (!checkIfShouldExit()) {
                     if (readPackets()) {
-                        rsocketObject.notifyRecvdData();
+                        rsignallingObject.notifyRecvdData();
                     }
                     else {
-                        rsocketObject.notifySocketClosed();
+                        rsignallingObject.notifySocketClosed();
                         Sleep(1000); //wait 1 second and try again
                     }
                 };
@@ -59,11 +103,11 @@ class HyperCubeClientCore : public ISocketObject, IwthreadObject
             }
             bool readPackets(void);
         public:
-            RecvActivity(ISocketObject& _isocketObject, SignallingObject& _signallingObject) :
+            RecvActivity(Ctcp::Client& _rclient, SignallingObject& _signallingObject) :
                 CstdThread(this),
-                rsocketObject{ _isocketObject },
+                rclient{ _rclient},
                 rsignallingObject{ _signallingObject },
-                recvPacketBuilder(_isocketObject, COMMON_PACKETSIZE_MAX)
+                recvPacketBuilder(*this, COMMON_PACKETSIZE_MAX)
             {};
             bool init(void) {
                 recvPacketBuilder.init();
@@ -80,6 +124,11 @@ class HyperCubeClientCore : public ISocketObject, IwthreadObject
                 return true;
             }
 
+            int readData(void* pdata, int dataLen)
+            {
+                return rclient.recv((char*)pdata, dataLen);
+            }
+
             bool recvPacket(Packet::UniquePtr& rppacket) {
                 bool stat = inPacketQ.pop(rppacket);
                 return stat;
@@ -88,7 +137,7 @@ class HyperCubeClientCore : public ISocketObject, IwthreadObject
 
         class SendActivity : public CstdThread {
         private:
-            ISocketObject& rsocketObject;
+            Ctcp::Client& rclient;
             WritePacketBuilder writePacketBuilder;
             PacketQWithLock outPacketQ;
             virtual bool threadFunction(void) {
@@ -109,9 +158,9 @@ class HyperCubeClientCore : public ISocketObject, IwthreadObject
             int totalBytesSent = 0;
 
         public:
-            SendActivity(ISocketObject& _isocketObject) :
+            SendActivity(Ctcp::Client& _rclient) :
                 CstdThread(this),
-                rsocketObject{ _isocketObject },
+                rclient{ _rclient},
                 writePacketBuilder(COMMON_PACKETSIZE_MAX) 
             {};
             ~SendActivity() {};
@@ -134,36 +183,27 @@ class HyperCubeClientCore : public ISocketObject, IwthreadObject
                 eventPacketsAvailableToSend.notify();
                 return true;
             }
+            int sendData(const void* pdata, const int dataLen)
+            {
+                return rclient.send((char*)pdata, dataLen);
+            }
+
         };
+
+protected:
 
         SignallingObject signallingObject;
         RecvActivity receiveActivity;
         SendActivity sendActivity;
 
         Ctcp::Client client;
-        std::string serverIpAddress;
+
         static const int SERVER_PORT = 5054;
-
-
-        virtual int readData(void* pdata, int dataLen);
-        virtual int sendData(const void* pdata, const int dataLen);
-
-        virtual bool notifySocketClosed(void);
-        virtual bool notifyRecvdData(void);
 
         MSerDes mserdes;
 
         double totalTime = 0;
         std::string dataString;
-
-        CstdThread stdThread;
-        std::atomic<bool> connected = false;
-        std::atomic<int> connectionAttempts = 0;
-
-        virtual bool threadFunction(void);
-        bool connectIfNotConnected(void);
-//        bool processConnectionEvents(void);
-        virtual bool setupConnection(void) = 0;
 
 public:
         HyperCubeClientCore();
@@ -174,28 +214,19 @@ public:
 
         virtual bool connectionClosed(void) { return true; };
 
-        bool sendMsg(Msg& msg);
-//        bool peekMsg(Msg& msg);
+        virtual bool sendMsg(Msg& msg);
         bool recvMsg(Msg& msg);
+        //        bool peekMsg(Msg& msg);
 
-        bool connect(void);
         SOCKET getSocket(void) { return client.getSocket(); }
-        bool socketValid(void) { return client.socketValid(); }
 
-        bool printRcvdMsgCmds(std::string sentString);
-        bool processInputMsgs(std::string sentString);
+//        bool printRcvdMsgCmds(std::string sentString);
+//        bool processInputMsgs(std::string sentString);
 };
 
 class HyperCubeClient : public HyperCubeClientCore
 {
-    uint64_t systemId;
 protected:
-    bool createGroup(std::string _groupName);
-    bool publish(void);
-    bool subscribe(void);
-    bool sendEcho(void);
-    bool sendLocalPing(void);
-    bool setupConnection(void);
 public:
     HyperCubeClient();
     ~HyperCubeClient();

@@ -119,7 +119,7 @@ bool HyperCubeClientCore::SendActivity::writePacket(void)
     }
 
     // send whats in packet builder
-    int numSent = rsocketObject.sendData(writePacketBuilder.getpData(), writePacketBuilder.getLength());
+    int numSent = sendData(writePacketBuilder.getpData(), writePacketBuilder.getLength());
 
     if (numSent < 0) numSent = 0;
     totalBytesSent += numSent;
@@ -144,18 +144,19 @@ bool HyperCubeClientCore::RecvActivity::readPackets(void)
         if (!rsignallingObject.isSignallingMsg(pinputPacket)) {
             inPacketQ.push(pinputPacket);
             pinputPacket = std::make_unique<Packet>();
-            rsocketObject.notifyRecvdData();
+            rsignallingObject.notifyRecvdData();
         }
     }
     return stat;
 }
 
+
 // ------------------------------------------------------------------------------------------------
 
 HyperCubeClientCore::HyperCubeClientCore() :
-    receiveActivity{*this, signallingObject},
-    sendActivity{*this},
-    stdThread(this)
+    signallingObject{this, client },
+    receiveActivity{client, signallingObject},
+    sendActivity{client }
 {
 };
 
@@ -165,63 +166,23 @@ HyperCubeClientCore::~HyperCubeClientCore() {
 
 bool HyperCubeClientCore::init(std::string _serverIpAddress, bool reInit) 
 {
-    serverIpAddress = _serverIpAddress;
-
     receiveActivity.init();
     sendActivity.init();
-    if (!stdThread.isStarted()) {
-        stdThread.init(true);
-    }
+    signallingObject.init(_serverIpAddress);
     return true;
 }
 
 bool HyperCubeClientCore::deinit(void)
 {
-    client.close();
+//    client.close();
 
-    if (stdThread.isStarted()) {
-        while (!stdThread.isExited()) {
-            stdThread.setShouldExit();
-            client.close();
-        }
-    }
-    stdThread.deinit(true);
-
+    signallingObject.deinit();
     receiveActivity.deinit();
     sendActivity.deinit();
 
     return true;
 };
 
-bool HyperCubeClientCore::connect(void) 
-{
-    bool stat = client.connect(serverIpAddress, SERVER_PORT);
-    return stat;
-}
-
-bool HyperCubeClientCore::notifySocketClosed(void)
-{
-    if (connected) {
-        client.close();
-        connected = false;
-    }
-    return true;
-}
-
- bool HyperCubeClientCore::notifyRecvdData(void)
-{
-     return true;
-}
-
-int HyperCubeClientCore::readData(void* pdata, int dataLen)
-{
-    return client.recv((char*)pdata, dataLen);
-}
-
-int HyperCubeClientCore::sendData(const void* pdata, const int dataLen)
-{
-    return client.send((char*)pdata, dataLen);
-}
 
 /*
 bool HyperCubeClientCore::sendPacket(Packet::UniquePtr& ppacket) 
@@ -241,43 +202,6 @@ bool HyperCubeClientCore::sendPacket(Packet::UniquePtr& ppacket)
     return allSent;
 }
 */
-bool HyperCubeClientCore::connectIfNotConnected(void)
-{
-    bool stat = true;    if (!socketValid()) {
-        if (connectionAttempts > 0) {
-            Sleep(HYPERCUBE_CONNECTIONINTERVAL_MS);
-            connectionAttempts = 0;
-        }
-        stat = connect();
-        if (stat) {
-            LOG_INFOD("HyperCubeClientCore::connectIfNotConnected()", "connected to " + serverIpAddress, 0);
-            setupConnection();
-            connected = true;
-        }
-        else
-            LOG_WARNING("HyperCubeClientCore::connectIfNotConnected()", "connection failed to " + serverIpAddress, 0);
-        connectionAttempts++;
-    }
-    return stat;
-}
-
-bool HyperCubeClientCore::threadFunction(void)
-{
-    LOG_INFO("HyperCubeClientCore::threadFunction(), ThreadStarted", 0);
-    while (!stdThread.checkIfShouldExit()) {
-        /*
-        if (connectIfNotConnected())
-//            if (!processConnectionEvents()) {
-                Sleep(1000);
-//            }
-    */
-        connectIfNotConnected();
-        Sleep(1000);
-    }
-    stdThread.exiting();
-    return true;
-}
-
 
 bool HyperCubeClientCore::sendMsg(Msg& msg) {
     Packet::UniquePtr ppacket = 0;
@@ -413,14 +337,65 @@ HyperCubeClient::HyperCubeClient() :
     HyperCubeClientCore{}
 {
     std::srand((unsigned int)std::time(nullptr));
-    systemId = std::rand();
+    signallingObject.systemId = std::rand();
 }
 
 HyperCubeClient::~HyperCubeClient() 
 {
 }
 
-bool HyperCubeClient::setupConnection(void)
+// ------------------------------------------------------------------------------------------------
+
+bool HyperCubeClientCore::SignallingObject::threadFunction(void)
+{
+    LOG_INFO("HyperCubeClientCore::threadFunction(), ThreadStarted", 0);
+    while (!checkIfShouldExit()) {
+        connectIfNotConnected();
+        eventDisconnectedFromServer.waitUntil(HYPERCUBE_CONNECTIONINTERVAL_MS);
+    }
+    exiting();
+    return true;
+}
+
+bool HyperCubeClientCore::SignallingObject::connectIfNotConnected(void)
+{
+    bool stat = true;
+    if (!socketValid()) {
+        stat = connect();
+        if (stat) {
+            LOG_INFOD("HyperCubeClientCore::connectIfNotConnected()", "connected to " + serverIpAddress, 0);
+            setupConnection();
+            connected = true;
+        }
+        else
+            LOG_WARNING("HyperCubeClientCore::connectIfNotConnected()", "connection failed to " + serverIpAddress, 0);
+        eventDisconnectedFromServer.reset();
+    }
+    return stat;
+}
+
+bool HyperCubeClientCore::SignallingObject::connect(void)
+{
+    bool stat = rclient.connect(serverIpAddress, SERVER_PORT);
+    return stat;
+}
+
+bool HyperCubeClientCore::SignallingObject::notifyRecvdData(void)
+{
+    return true;
+}
+
+bool HyperCubeClientCore::SignallingObject::notifySocketClosed(void)
+{
+    if (connected) {
+        rclient.close();
+        connected = false;
+        eventDisconnectedFromServer.notify();
+    }
+    return true;
+}
+
+bool HyperCubeClient::SignallingObject::setupConnection(void)
 {
     createGroup("Matrix group");
     sendEcho();
@@ -429,7 +404,7 @@ bool HyperCubeClient::setupConnection(void)
 }
 
 
-bool HyperCubeClient::sendEcho(void) 
+bool HyperCubeClient::SignallingObject::sendEcho(void)
 {
     std::string echoData = "";
     json j = {
@@ -443,7 +418,7 @@ bool HyperCubeClient::sendEcho(void)
     return sendMsg(msgCmd);
 }
 
-bool HyperCubeClient::sendLocalPing(void)
+bool HyperCubeClient::SignallingObject::sendLocalPing(void)
 {
     std::string pingData = "";
     json j = {
@@ -460,7 +435,7 @@ bool HyperCubeClient::sendLocalPing(void)
 
 
 
-bool HyperCubeClient::publish(void) 
+bool HyperCubeClient::SignallingObject::publish(void)
 {
     string command; 
     uint64_t _groupId = 1;
@@ -480,7 +455,7 @@ bool HyperCubeClient::publish(void)
     return sendMsg(signallingMsg);
 }
 
-bool HyperCubeClient::createGroup(std::string _groupName) 
+bool HyperCubeClient::SignallingObject::createGroup(std::string _groupName)
 {
     string command; 
     json j = {
@@ -498,7 +473,7 @@ bool HyperCubeClient::createGroup(std::string _groupName)
 }
 
 
-bool HyperCubeClient::subscribe(void) 
+bool HyperCubeClient::SignallingObject::subscribe(void)
 {
     string command; 
     uint64_t _groupId = 1;
