@@ -19,6 +19,8 @@ class HyperCubeClientCore : IHyperCubeClientCore
 {
     private:
 
+        class SignallingObject;
+
         class PacketQWithLock : std::deque<Packet::UniquePtr> {
             std::mutex qLock;
         public:
@@ -28,11 +30,48 @@ class HyperCubeClientCore : IHyperCubeClientCore
             bool isEmpty(void);
         };
 
+        class RecvActivity : CstdThread, RecvPacketBuilder::IReadDataObject {
+        private:
+            Ctcp::Client& rclient;
+            SignallingObject& rsignallingObject;
+            RecvPacketBuilder recvPacketBuilder;
+            PacketQWithLock inPacketQ;
+            std::unique_ptr<Packet> pinputPacket = 0;
+            virtual bool threadFunction(void);
+            bool readPackets(void);
+        public:
+            RecvActivity(Ctcp::Client& _rclient, SignallingObject& _signallingObject);
+            bool init(void);
+            bool deinit(void);
+            int readData(void* pdata, int dataLen);
+            bool recvPacket(Packet::UniquePtr& rppacket);
+        };
+
+        class SendActivity : public CstdThread {
+        private:
+            Ctcp::Client& rclient;
+            WritePacketBuilder writePacketBuilder;
+            PacketQWithLock outPacketQ;
+            virtual bool threadFunction(void);
+            bool writePacket(void);
+            bool writePackets(void);
+
+            CstdConditional eventPacketsAvailableToSend;
+            int totalBytesSent = 0;
+
+        public:
+            SendActivity(Ctcp::Client& _rclient);
+            ~SendActivity();
+            bool init(void);
+            bool deinit(void);
+            bool sendPacket(Packet::UniquePtr& rppacket);
+            int sendData(const void* pdata, const int dataLen);
+        };
+
         class SignallingObject : CstdThread {
             MSerDes mserdes;
             CstdConditional eventDisconnectedFromServer;
             std::atomic<bool> connected = false;
-//            std::atomic<int> connectionAttempts = 0;
 
             Ctcp::Client& rclient;
             IHyperCubeClientCore* pIHyperCubeClientCore = 0;
@@ -81,115 +120,6 @@ class HyperCubeClientCore : IHyperCubeClientCore
             virtual bool notifyRecvdData(void);
         };
 
-        class RecvActivity : CstdThread, RecvPacketBuilder::IReadDataObject {
-        private:
-            Ctcp::Client& rclient;
-            SignallingObject& rsignallingObject;
-            RecvPacketBuilder recvPacketBuilder;
-            PacketQWithLock inPacketQ;
-            std::unique_ptr<Packet> pinputPacket = 0;
-            virtual bool threadFunction(void) {
-                while (!checkIfShouldExit()) {
-                    if (readPackets()) {
-                        rsignallingObject.notifyRecvdData();
-                    }
-                    else {
-                        rsignallingObject.notifySocketClosed();
-                        Sleep(1000); //wait 1 second and try again
-                    }
-                };
-                exiting();
-                return true;
-            }
-            bool readPackets(void);
-        public:
-            RecvActivity(Ctcp::Client& _rclient, SignallingObject& _signallingObject) :
-                CstdThread(this),
-                rclient{ _rclient},
-                rsignallingObject{ _signallingObject },
-                recvPacketBuilder(*this, COMMON_PACKETSIZE_MAX)
-            {};
-            bool init(void) {
-                recvPacketBuilder.init();
-                pinputPacket = std::make_unique<Packet>();
-                CstdThread::init(true);
-                return true;
-            }
-            bool deinit(void) {
-                recvPacketBuilder.deinit();
-                Packet* packet = pinputPacket.release();
-                if (packet) delete packet;
-                inPacketQ.deinit();
-                CstdThread::deinit(true);
-                return true;
-            }
-
-            int readData(void* pdata, int dataLen)
-            {
-                return rclient.recv((char*)pdata, dataLen);
-            }
-
-            bool recvPacket(Packet::UniquePtr& rppacket) {
-                bool stat = inPacketQ.pop(rppacket);
-                return stat;
-            }
-        };
-
-        class SendActivity : public CstdThread {
-        private:
-            Ctcp::Client& rclient;
-            WritePacketBuilder writePacketBuilder;
-            PacketQWithLock outPacketQ;
-            virtual bool threadFunction(void) {
-                while (!checkIfShouldExit()) {
-                    eventPacketsAvailableToSend.wait();
-                    eventPacketsAvailableToSend.reset();
-                    if (writePackets()) {
-//                        Sleep(1000); // wait a little and try again
-                    }
-                };
-                exiting();
-                return true;
-            }
-            bool writePacket(void);
-            bool writePackets(void);
-
-            CstdConditional eventPacketsAvailableToSend;
-            int totalBytesSent = 0;
-
-        public:
-            SendActivity(Ctcp::Client& _rclient) :
-                CstdThread(this),
-                rclient{ _rclient},
-                writePacketBuilder(COMMON_PACKETSIZE_MAX) 
-            {};
-            ~SendActivity() {};
-            bool init(void) {
-                writePacketBuilder.init();
-                eventPacketsAvailableToSend.reset();
-                CstdThread::init(true);
-                return true;
-            }
-            bool deinit(void) {
-                CstdThread::setShouldExit();
-                eventPacketsAvailableToSend.notify();
-                CstdThread::deinit(true);
-                writePacketBuilder.deinit();
-                outPacketQ.deinit();
-                return true;
-            }
-            bool sendPacket(Packet::UniquePtr& rppacket) {
-                outPacketQ.push(rppacket);
-                eventPacketsAvailableToSend.notify();
-                return true;
-            }
-            int sendData(const void* pdata, const int dataLen)
-            {
-                return rclient.send((char*)pdata, dataLen);
-            }
-
-        };
-
 protected:
 
         SignallingObject signallingObject;
@@ -216,7 +146,8 @@ public:
 
         virtual bool sendMsg(Msg& msg);
         bool recvMsg(Msg& msg);
-        //        bool peekMsg(Msg& msg);
+
+//        bool peekMsg(Msg& msg);
 
         SOCKET getSocket(void) { return client.getSocket(); }
 
