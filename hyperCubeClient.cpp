@@ -1,6 +1,9 @@
 #include <stdio.h>
 
 #include "Logger.h"
+#include <Winsock2.h> // before Windows.h, else Winsock 1 conflict
+#include <errno.h>
+
 #include "hyperCubeClient.h"
 #include "Common.h"
 #include "Packet.h"
@@ -13,93 +16,297 @@ using json = nlohmann::json;
 
 using namespace std;
 
-HyperCubeClient::HyperCubeClient() :
-    recvPacketBuilder(*this, COMMON_PACKETSIZE_MAX),
-    threadSafeWritePacketBuilder(COMMON_PACKETSIZE_MAX)
-{
-    std::srand((unsigned int)std::time(nullptr));
-    systemId = std::rand();
-};
+#ifdef _WIN64
+#define poll WSAPoll
+#else
+#endif
 
-HyperCubeClient::~HyperCubeClient() {
+// ------------------------------------------------------------------------------------------------
 
-};
+void HyperCubeClientCore::PacketQWithLock::deinit(void) {
+    std::lock_guard<std::mutex> lock(qLock);
+    while (size() > 0) {
+        std::unique_ptr<Packet> rpacket = std::move(std::deque<Packet::UniquePtr>::front());
+        Packet* packet = rpacket.release();
+        if (packet) delete packet;
+        pop_front();
+    }
+}
 
-bool HyperCubeClient::init(std::string _serverIpAddress) {
-    serverIpAddress = _serverIpAddress;
-    threadSafeWritePacketBuilder.init();
-    recvPacketBuilder.reset();
-    pinputPacket = std::make_unique<Packet>();
+void HyperCubeClientCore::PacketQWithLock::push(std::unique_ptr<Packet>& rpacket) {
+    std::lock_guard<std::mutex> lock(qLock);
+    push_back(std::move(rpacket));
+}
 
+bool HyperCubeClientCore::PacketQWithLock::pop(std::unique_ptr<Packet>& rpacket) {
+    std::lock_guard<std::mutex> lock(qLock);
+    if (empty()) return false;
+    rpacket = std::move(std::deque<Packet::UniquePtr>::front());
+    pop_front();
     return true;
 }
 
-bool HyperCubeClient::deinit(void)
+bool HyperCubeClientCore::PacketQWithLock::isEmpty(void) 
 {
-    return true;
-};
-
-bool HyperCubeClient::connect(std::string _serverIpAddress) {
-    serverIpAddress = _serverIpAddress;
-    return client.connect(serverIpAddress, SERVER_PORT);
+    std::lock_guard<std::mutex> lock(qLock);
+    return empty();
 }
 
-int HyperCubeClient::readData(void* pdata, int dataLen)
+// ----------------------------------------------------------------------
+
+bool HyperCubeClientCore::SignallingObject::isSignallingMsg(std::unique_ptr<Packet>& rppacket)
 {
-    return client.recv((char*)pdata, dataLen);
+    bool sigMsg = false;
+    Msg msg;
+    const Packet* ppacket = rppacket.get();
+    assert(mserdes.packetToMsg(ppacket, msg));
+    bool msgProcessed = false;
+    switch (msg.subSys) {
+        case SUBSYS_SIG:
+            sigMsg = true;
+            switch (msg.command) {
+                case CMD_JSON:
+                    processSigMsgJson(ppacket);
+                    break;
+                default:
+                    assert(false); // should not get here
+            }
+            break;
+        default:
+            break;
+    }
+    return sigMsg;
 }
 
-bool HyperCubeClient::sendPacket(Packet::UniquePtr& ppacket) {
+bool HyperCubeClientCore::SignallingObject::processSigMsgJson(const Packet* ppacket)
+{
+    MsgJson msgJson;
+    json jsonData;
+    assert(mserdes.packetToMsgJson(ppacket, msgJson, jsonData));
+    bool msgProcessed = false;
 
-    Packet* packet = ppacket.get();
+    try {
+        std::string line = msgJson.jsonData;
+//        LOG_INFOD("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received " + line, 0);
+        std::string command = jsonData["command"];
+        if (command == "localPing") {
+            LOG_INFOD("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received LocalPing" + line, 0);
+            msgProcessed = true;
+        }
+    }
+    catch (std::exception& e) {
+        LOG_WARNING("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "Failed to decode json" + std::string(e.what()), 0);
+    }
+    return msgProcessed;
+}
 
-    if (threadSafeWritePacketBuilder.empty()) {
-        threadSafeWritePacketBuilder.addNew(*packet);
-    } else return false;
+// ----------------------------------------------------------------------
 
-    int numSent = client.send(threadSafeWritePacketBuilder.getpData(), threadSafeWritePacketBuilder.getLength());
+bool HyperCubeClientCore::SendActivity::writePacket(void)
+{
+    Packet* packet = 0;
+
+    // load packet builder if needed
+    if (writePacketBuilder.empty()) {
+
+        Packet::UniquePtr ppacket = 0;
+        bool stat = outPacketQ.pop(ppacket);
+
+        if (!stat) return true; // all sent, nothing to send
+
+        packet = ppacket.get();
+        writePacketBuilder.addNew(*packet);
+    }
+
+    // send whats in packet builder
+    int numSent = rsocketObject.sendData(writePacketBuilder.getpData(), writePacketBuilder.getLength());
+
+    if (numSent < 0) numSent = 0;
     totalBytesSent += numSent;
-    bool allSent = threadSafeWritePacketBuilder.setNumSent(numSent);
+    bool sendDone = writePacketBuilder.setNumSent(numSent);
 
-    if (numSent!=packet->getLength()) return false;
-
-    return allSent;
+    return sendDone;
 }
 
-bool HyperCubeClient::recvPackets(void) {
-    bool stat = false;
-    while(client.isDataAvailable()) {
-        if (recvPacketBuilder.readPacket(*pinputPacket)) {
-            inPacketQ.push_back(std::move(pinputPacket));
+bool HyperCubeClientCore::SendActivity::writePackets(void)
+{
+    bool sendDone = false;
+    do {
+        sendDone = writePacket();
+    } while (!outPacketQ.isEmpty());
+    return sendDone;
+}
+
+bool HyperCubeClientCore::RecvActivity::readPackets(void)
+{
+    bool stat = recvPacketBuilder.readPacket(*pinputPacket);
+    if (stat) {
+        if (!rsignallingObject.isSignallingMsg(pinputPacket)) {
+            inPacketQ.push(pinputPacket);
             pinputPacket = std::make_unique<Packet>();
-            stat = true;
+            rsocketObject.notifyRecvdData();
         }
     }
     return stat;
 }
 
-bool HyperCubeClient::sendMsg(Msg& msg) {
+// ------------------------------------------------------------------------------------------------
+
+HyperCubeClientCore::HyperCubeClientCore() :
+    receiveActivity{*this, signallingObject},
+    sendActivity{*this},
+    stdThread(this)
+{
+};
+
+HyperCubeClientCore::~HyperCubeClientCore() {
+
+};
+
+bool HyperCubeClientCore::init(std::string _serverIpAddress, bool reInit) 
+{
+    serverIpAddress = _serverIpAddress;
+
+    receiveActivity.init();
+    sendActivity.init();
+    if (!stdThread.isStarted()) {
+        stdThread.init(true);
+    }
+    return true;
+}
+
+bool HyperCubeClientCore::deinit(void)
+{
+    client.close();
+
+    if (stdThread.isStarted()) {
+        while (!stdThread.isExited()) {
+            stdThread.setShouldExit();
+            client.close();
+        }
+    }
+    stdThread.deinit(true);
+
+    receiveActivity.deinit();
+    sendActivity.deinit();
+
+    return true;
+};
+
+bool HyperCubeClientCore::connect(void) 
+{
+    bool stat = client.connect(serverIpAddress, SERVER_PORT);
+    return stat;
+}
+
+bool HyperCubeClientCore::notifySocketClosed(void)
+{
+    if (connected) {
+        client.close();
+        connected = false;
+    }
+    return true;
+}
+
+ bool HyperCubeClientCore::notifyRecvdData(void)
+{
+     return true;
+}
+
+int HyperCubeClientCore::readData(void* pdata, int dataLen)
+{
+    return client.recv((char*)pdata, dataLen);
+}
+
+int HyperCubeClientCore::sendData(const void* pdata, const int dataLen)
+{
+    return client.send((char*)pdata, dataLen);
+}
+
+/*
+bool HyperCubeClientCore::sendPacket(Packet::UniquePtr& ppacket) 
+{
+    Packet* packet = ppacket.get();
+
+    if (writePacketBuilder.empty()) {
+        writePacketBuilder.addNew(*packet);
+    } else return false;
+
+    int numSent = client.send(writePacketBuilder.getpData(), writePacketBuilder.getLength());
+    totalBytesSent += numSent;
+    bool allSent = writePacketBuilder.setNumSent(numSent);
+
+    if (numSent!=packet->getLength()) return false;
+
+    return allSent;
+}
+*/
+bool HyperCubeClientCore::connectIfNotConnected(void)
+{
+    bool stat = true;    if (!socketValid()) {
+        if (connectionAttempts > 0) {
+            Sleep(HYPERCUBE_CONNECTIONINTERVAL_MS);
+            connectionAttempts = 0;
+        }
+        stat = connect();
+        if (stat) {
+            LOG_INFOD("HyperCubeClientCore::connectIfNotConnected()", "connected to " + serverIpAddress, 0);
+            setupConnection();
+            connected = true;
+        }
+        else
+            LOG_WARNING("HyperCubeClientCore::connectIfNotConnected()", "connection failed to " + serverIpAddress, 0);
+        connectionAttempts++;
+    }
+    return stat;
+}
+
+bool HyperCubeClientCore::threadFunction(void)
+{
+    LOG_INFO("HyperCubeClientCore::threadFunction(), ThreadStarted", 0);
+    while (!stdThread.checkIfShouldExit()) {
+        /*
+        if (connectIfNotConnected())
+//            if (!processConnectionEvents()) {
+                Sleep(1000);
+//            }
+    */
+        connectIfNotConnected();
+        Sleep(1000);
+    }
+    stdThread.exiting();
+    return true;
+}
+
+
+bool HyperCubeClientCore::sendMsg(Msg& msg) {
     Packet::UniquePtr ppacket = 0;
     ppacket = Packet::create();
     mserdes.msgToPacket(msg, ppacket);
-    return sendPacket(ppacket);
+    sendActivity.sendPacket(ppacket);
+    return true;
 }
 
-bool HyperCubeClient::peekMsg(Msg& msg) {
+/*
+bool HyperCubeClientCore::peekMsg(Msg& msg) {
     if (inPacketQ.size()<=0) return false;
     mserdes.packetToMsg(inPacketQ.front().get(), msg);
     return true;
 }
+*/
 
-bool HyperCubeClient::recvMsg(Msg& msg) {
-    if (!peekMsg(msg)) return false;
-    inPacketQ.pop_front();
-    return true;
+bool HyperCubeClientCore::recvMsg(Msg& msg) {
+    Packet::UniquePtr ppacket = 0;
+    bool stat = receiveActivity.recvPacket(ppacket);
+    if (stat) 
+        mserdes.packetToMsg(ppacket.get(), msg);
+    return stat;
 }
 
-bool HyperCubeClient::printRcvdMsgCmds(std::string sentString) {
+/*
+bool HyperCubeClientCore::printRcvdMsgCmds(std::string sentString) {
     bool stat = false;
-    while (inPacketQ.size()>0) {
+    while (!PacketQ.isEmpty()) {
         MsgCmd msgCmd("");
         mserdes.packetToMsg(inPacketQ.front().get(), msgCmd);
         std::cout << "Received cmdString: " + msgCmd.jsonData + "\n";
@@ -113,7 +320,8 @@ bool HyperCubeClient::printRcvdMsgCmds(std::string sentString) {
     return stat;
 }
 
-bool HyperCubeClient::processInputMsgs(std::string sentString) {
+
+bool HyperCubeClientCore::processInputMsgs(std::string sentString) {
     bool stat = false;
     while (inPacketQ.size()>0) {
         MsgCmd msgCmd("");
@@ -153,6 +361,73 @@ bool HyperCubeClient::processInputMsgs(std::string sentString) {
     }
     return stat;
 }
+*/
+
+/*
+bool HyperCubeClientCore::processConnectionEvents(void)
+{
+    struct pollfd pollFds[1];
+    memset(pollFds, 0, sizeof(pollfd));
+    int numFds = 1;
+
+    pollFds[0].fd = getSocket();
+    LOG_ASSERT(pollFds[0].fd > 0);
+    pollFds[0].events = POLLOUT | POLLIN;
+    pollFds[0].revents = 0;
+
+    //int res = poll(pollFds, numFds, -1);
+    /// set a timeout for this poll, so that it will exit after this timeout and loop around again. 
+    /// This is so that, if new sockets are added while the current poll is blocked, any data sent on the new sockets will not be 
+    /// received until, the current poll is unblocked and a new poll is started with the new sockets in pollFds. 
+    /// So, we timeout every 1 second, so that if any new sockets are added during a poll that is blocked, it will exit and 
+    /// come around again with the new socket added in pollFds.
+    int res = poll(pollFds, numFds, 1000);
+    if (res < 0) {
+        LOG_WARNING("HyperCubeClientCore::processConnectionEvents()", "poll returned - 1", res);
+        return false;
+    }
+    if ((pollFds[0].fd > 0) && (pollFds[0].revents != 0)) { // if not being ignored
+    // check socket index match. It should even if a new connection was added.
+        int revents = pollFds[0].revents;
+        if ((revents & POLLRDNORM) || (revents & POLLRDBAND)) {
+            recvPackets();
+        }
+        if (revents & POLLWRNORM) {
+            writePackets();
+        }
+        if (revents & POLLPRI) {
+            LOG_INFO("HyperCubeClientCore::processConnectionEvents(), poll returned POLLPRI", pollFds[0].revents);
+        }
+        if ((revents & POLLHUP) || (revents & POLLERR) || (revents & POLLNVAL)) {
+            connectionClosed();
+            LOG_INFO("HyperCubeClientCore::processConnectionEvents(), TCP connection close", (int)pollFds[0].fd);
+        }
+    }
+    return true;
+};
+*/
+
+// ------------------------------------------------------------
+
+HyperCubeClient::HyperCubeClient() :
+    HyperCubeClientCore{}
+{
+    std::srand((unsigned int)std::time(nullptr));
+    systemId = std::rand();
+}
+
+HyperCubeClient::~HyperCubeClient() 
+{
+}
+
+bool HyperCubeClient::setupConnection(void)
+{
+    createGroup("Matrix group");
+    sendEcho();
+    sendLocalPing();
+    return true;
+}
+
 
 bool HyperCubeClient::sendEcho(void) 
 {
@@ -167,6 +442,22 @@ bool HyperCubeClient::sendEcho(void)
     MsgCmd msgCmd(command);
     return sendMsg(msgCmd);
 }
+
+bool HyperCubeClient::sendLocalPing(void)
+{
+    std::string pingData = "";
+    json j = {
+        { "command", "localPing" },
+        { "systemId", systemId },
+        { "data", pingData }
+    };
+
+    cout << "Send Local Ping " << pingData << "\n";
+    string command = j.dump();
+    SigMsg msgCmd(command);
+    return sendMsg(msgCmd);
+}
+
 
 
 bool HyperCubeClient::publish(void) 
