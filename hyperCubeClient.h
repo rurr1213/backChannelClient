@@ -6,13 +6,28 @@
 #include "mserdes.h"
 #include "Packet.h"
 
-#define HYPERCUBE_CONNECTIONINTERVAL_MS 10000			// connection attempt interval in milliseconds
+#define HYPERCUBE_CONNECTIONINTERVAL_MS 8000			// connection attempt interval in milliseconds
 
 
-class IHyperCubeClientCore 
+class IHyperCubeClientCore
 {
+    Ctcp::Client& rtcpClient;
 public:
+    IHyperCubeClientCore(Ctcp::Client& _rtcpClient) :
+        rtcpClient{ _rtcpClient } {};
+
+//    virtual bool tcpClose(void) { return rtcpClient.close(); }
+    virtual bool tcpConnect(std::string addrString, int port) { return rtcpClient.connect(addrString, port); }
+    virtual bool tcpSocketValid(void) { return rtcpClient.socketValid(); }
+    virtual int tcpGetSocket(void) { return (int)rtcpClient.getSocket(); }
+    int tcpRecv(char* buf, const int bufSize) { return rtcpClient.recv(buf, bufSize); }
+    int tcpSend(const char* buf, const int bufSize) { return rtcpClient.send(buf, bufSize); }
+
     virtual bool sendMsg(Msg& msg) = 0;
+    virtual bool onReceivedData(void) = 0;
+    virtual bool onConnect(void) = 0;
+    virtual bool onDisconnect(void) = 0;
+    virtual bool isSignallingMsg(std::unique_ptr<Packet>& rppacket) = 0;
 };
 
 class HyperCubeClientCore : IHyperCubeClientCore
@@ -24,32 +39,37 @@ class HyperCubeClientCore : IHyperCubeClientCore
         class PacketQWithLock : std::deque<Packet::UniquePtr> {
             std::mutex qLock;
         public:
+            void init(void);
             void deinit(void);
             void push(std::unique_ptr<Packet>& rpacket);
             bool pop(std::unique_ptr<Packet>& rpacket);
             bool isEmpty(void);
+            int size(void);
         };
 
         class RecvActivity : CstdThread, RecvPacketBuilder::IReadDataObject {
         private:
-            Ctcp::Client& rclient;
-            SignallingObject& rsignallingObject;
+            IHyperCubeClientCore* pIHyperCubeClientCore = 0;
             RecvPacketBuilder recvPacketBuilder;
             PacketQWithLock inPacketQ;
             std::unique_ptr<Packet> pinputPacket = 0;
+            CstdConditional eventReadyToRead;
             virtual bool threadFunction(void);
             bool readPackets(void);
+            int readData(void* pdata, int dataLen);
+            bool firstRead = false;
         public:
-            RecvActivity(Ctcp::Client& _rclient, SignallingObject& _signallingObject);
+            RecvActivity(IHyperCubeClientCore* pIHyperCubeClientCore, SignallingObject& _signallingObject);
             bool init(void);
             bool deinit(void);
-            int readData(void* pdata, int dataLen);
             bool recvPacket(Packet::UniquePtr& rppacket);
+            bool onConnect(void);
+            bool onDisconnect(void);
         };
 
         class SendActivity : public CstdThread {
         private:
-            Ctcp::Client& rclient;
+            IHyperCubeClientCore* pIHyperCubeClientCore = 0;
             WritePacketBuilder writePacketBuilder;
             PacketQWithLock outPacketQ;
             virtual bool threadFunction(void);
@@ -58,24 +78,26 @@ class HyperCubeClientCore : IHyperCubeClientCore
 
             CstdConditional eventPacketsAvailableToSend;
             int totalBytesSent = 0;
+            int sendData(const void* pdata, const int dataLen);
 
         public:
-            SendActivity(Ctcp::Client& _rclient);
+            SendActivity(IHyperCubeClientCore* _pIHyperCubeClientCore);
             ~SendActivity();
             bool init(void);
             bool deinit(void);
             bool sendPacket(Packet::UniquePtr& rppacket);
-            int sendData(const void* pdata, const int dataLen);
+            bool onConnect(void);
+            bool onDisconnect(void);
         };
 
         class SignallingObject : CstdThread {
             MSerDes mserdes;
             CstdConditional eventDisconnectedFromServer;
             std::atomic<bool> connected = false;
+            std::atomic<bool> justDisconnected = false;
 
-            Ctcp::Client& rclient;
             IHyperCubeClientCore* pIHyperCubeClientCore = 0;
-            bool socketValid(void) { return rclient.socketValid(); }
+            bool socketValid(void) { return pIHyperCubeClientCore->tcpSocketValid(); }
             bool connect(void);
             std::string serverIpAddress;
             bool connectIfNotConnected(void);
@@ -94,31 +116,18 @@ class HyperCubeClientCore : IHyperCubeClientCore
         public:
             uint64_t systemId;
 
-            SignallingObject(IHyperCubeClientCore* _pIHyperCubeClientCore, Ctcp::Client& _rclient) :
-                pIHyperCubeClientCore{ _pIHyperCubeClientCore },
-                CstdThread(this),
-                rclient{ _rclient } {};
-            void init(std::string _serverIpAddress) {
-                serverIpAddress = _serverIpAddress;
-                if (!isStarted()) {
-                    CstdThread::init(true);
-                    eventDisconnectedFromServer.reset();
-                }
-            }
-            void deinit(void) {
-                if (isStarted()) {
-                    while (!isExited()) {
-                        setShouldExit();
-                        eventDisconnectedFromServer.notify();
-                    }
-                    rclient.close(); // close after thread exits, to avoid reconnecting before exit
-                }
-                CstdThread::deinit(true);
-            }
+            SignallingObject(IHyperCubeClientCore* _pIHyperCubeClientCore);
+            void init(std::string _serverIpAddress);
+            void deinit(void);
             virtual bool isSignallingMsg(std::unique_ptr<Packet>& rppacket);
-            virtual bool notifySocketClosed(void);
-            virtual bool notifyRecvdData(void);
+            virtual bool onConnect(void);
+            virtual bool onDisconnect(void);
         };
+
+        virtual bool onConnect(void);
+        virtual bool onDisconnect(void);
+        virtual bool isSignallingMsg(std::unique_ptr<Packet>& rppacket);
+        virtual bool onReceivedData(void);
 
 protected:
 
