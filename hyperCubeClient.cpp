@@ -57,12 +57,6 @@ bool HyperCubeClientCore::PacketQWithLock::isEmpty(void)
     return empty();
 }
 
-int HyperCubeClientCore::PacketQWithLock::size(void)
-{
-    std::lock_guard<std::mutex> lock(qLock);
-    return (int)std::deque<Packet::UniquePtr>::size();
-}
-
 // ----------------------------------------------------------------------
 
 
@@ -124,32 +118,18 @@ bool HyperCubeClientCore::RecvActivity::readPackets(void)
 
 int HyperCubeClientCore::RecvActivity::readData(void* pdata, int dataLen)
 {
-    if (firstRead) {
-        std::string line = "reading from socket# " + std::to_string(pIHyperCubeClientCore->tcpGetSocket());
-        LOG_INFOD("HyperCubeClientCore::RecvActivity::readData()", line, 0);
-    }
     int res = pIHyperCubeClientCore->tcpRecv((char*)pdata, dataLen);
-
-    if (firstRead) {
-        std::string line = "read from socket# " + std::to_string(pIHyperCubeClientCore->tcpGetSocket());
-        LOG_INFOD("HyperCubeClientCore::RecvActivity::readData()", line, 0);
-        firstRead = false;
-    }
-
     return res;
 }
 
 bool HyperCubeClientCore::RecvActivity::onConnect(void)
 {
-    LOG_INFOD("HyperCubeClientCore::RecvActivity::onConnect()", "", 0);
-    firstRead = true;
     eventReadyToRead.notify();
     return true;
 }
 
 bool HyperCubeClientCore::RecvActivity::onDisconnect(void)
 {
-    LOG_INFOD("HyperCubeClientCore::RecvActivity::onDisconnect()", "", 0);
     eventReadyToRead.reset();
     return true;
 }
@@ -236,18 +216,15 @@ bool HyperCubeClientCore::SendActivity::writePackets(void)
     return sendDone;
 }
 
-bool HyperCubeClientCore::SendActivity::sendPacket(Packet::UniquePtr& rppacket) {
+bool HyperCubeClientCore::SendActivity::sendPacket(Packet::UniquePtr& rppacket) 
+{
     outPacketQ.push(rppacket);
     eventPacketsAvailableToSend.notify();
-
-    LOG_INFOD("HyperCubeClientCore::SendActivity::sendPacket()", "outPacketQ size", outPacketQ.size());
     return true;
 }
 
 int HyperCubeClientCore::SendActivity::sendData(const void* pdata, const int dataLen)
 {
-    LOG_INFOD("HyperCubeClientCore::SendActivity::sendData()", "sending data", dataLen);
-
     return pIHyperCubeClientCore->tcpSend((char*)pdata, dataLen);
 }
 
@@ -399,6 +376,8 @@ bool HyperCubeClientCore::SignallingObject::setupConnection(void)
     //sendEcho();
     sendLocalPing();
     createGroup("Matrix group");
+    createGroup("Matrix group2");
+    createGroup("Matrix group3");
     LOG_INFOD("HyperCubeClientCore::SignallingObject::setupConnection()", "done setup", 0);
     return true;
 }

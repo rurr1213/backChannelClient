@@ -2,6 +2,7 @@
 #include <queue>
 
 #include "tcp.h"
+#include "sthread.h"
 #include "Messages.h"
 #include "mserdes.h"
 #include "Packet.h"
@@ -44,7 +45,6 @@ class HyperCubeClientCore : IHyperCubeClientCore
             void push(std::unique_ptr<Packet>& rpacket);
             bool pop(std::unique_ptr<Packet>& rpacket);
             bool isEmpty(void);
-            int size(void);
         };
 
         class RecvActivity : CstdThread, RecvPacketBuilder::IReadDataObject {
@@ -57,7 +57,6 @@ class HyperCubeClientCore : IHyperCubeClientCore
             virtual bool threadFunction(void);
             bool readPackets(void);
             int readData(void* pdata, int dataLen);
-            bool firstRead = false;
         public:
             RecvActivity(IHyperCubeClientCore* pIHyperCubeClientCore, SignallingObject& _signallingObject);
             bool init(void);
