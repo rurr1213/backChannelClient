@@ -272,7 +272,7 @@ void HyperCubeClientCore::SignallingObject::deinit(void)
 
 bool HyperCubeClientCore::SignallingObject::threadFunction(void)
 {
-    LOG_INFO("HyperCubeClientCore::threadFunction(), ThreadStarted", 0);
+    LOG_INFO("HyperCubeClientCore::threadFunction()", "ThreadStarted", 0);
     while (!checkIfShouldExit()) {
         connectIfNotConnected();
         eventDisconnectedFromServer.waitUntil(HYPERCUBE_CONNECTIONINTERVAL_MS);
@@ -291,7 +291,7 @@ bool HyperCubeClientCore::SignallingObject::connectIfNotConnected(void)
         }
         stat = connect();
         if (stat) {
-            LOG_INFOD("HyperCubeClientCore::connectIfNotConnected()", "connected to " + serverIpAddress, 0);
+            LOG_INFO("HyperCubeClientCore::connectIfNotConnected()", "connected to " + serverIpAddress, 0);
             pIHyperCubeClientCore->onConnect();
             setupConnection();
             connected = true;
@@ -337,10 +337,10 @@ bool HyperCubeClientCore::SignallingObject::processSigMsgJson(const Packet* ppac
 
     try {
         std::string line = msgJson.jsonData;
-        //        LOG_INFOD("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received " + line, 0);
+        //        LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received " + line, 0);
         std::string command = jsonData["command"];
         if (command == "localPing") {
-            LOG_INFOD("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received LocalPing" + line, 0);
+            LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received LocalPing" + line, 0);
             msgProcessed = true;
         }
     }
@@ -378,7 +378,7 @@ bool HyperCubeClientCore::SignallingObject::setupConnection(void)
     createGroup("Matrix group");
     createGroup("Matrix group2");
     createGroup("Matrix group3");
-    LOG_INFOD("HyperCubeClientCore::SignallingObject::setupConnection()", "done setup", 0);
+    LOG_INFO("HyperCubeClientCore::SignallingObject::setupConnection()", "done setup", 0);
     return true;
 }
 
@@ -394,7 +394,7 @@ bool HyperCubeClientCore::SignallingObject::sendEcho(void)
     //cout << "Send Echo " << echoData << "\n";
     string command = j.dump();
     MsgCmd msgCmd(command);
-    LOG_INFOD("HyperCubeClientCore::sendEcho()", "", 0);
+    LOG_INFO("HyperCubeClientCore::sendEcho()", "", 0);
     return sendMsg(msgCmd);
 }
 
@@ -410,7 +410,7 @@ bool HyperCubeClientCore::SignallingObject::sendLocalPing(void)
     cout << "Send Local Ping " << pingData << "\n";
     string command = j.dump();
     SigMsg msgCmd(command);
-    LOG_INFOD("HyperCubeClientCore::sendLocalPing()", "", 0);
+    LOG_INFO("HyperCubeClientCore::sendLocalPing()", "", 0);
     return sendMsg(msgCmd);
 }
 
@@ -433,7 +433,7 @@ bool HyperCubeClientCore::SignallingObject::publish(void)
     //cout << "Send Publish sid:" << to_string(systemId) << " gid:" << to_string(_groupId) << "\n";
 
     SigMsg signallingMsg(command);
-    LOG_INFOD("HyperCubeClientCore::publish()", "", 0);
+    LOG_INFO("HyperCubeClientCore::publish()", "", 0);
     return sendMsg(signallingMsg);
 }
 
@@ -451,7 +451,7 @@ bool HyperCubeClientCore::SignallingObject::createGroup(std::string _groupName)
     command = j.dump();
 
     SigMsg signallingMsg(command);
-    LOG_INFOD("HyperCubeClientCore::createGroup()", "", 0);
+    LOG_INFO("HyperCubeClientCore::createGroup()", "", 0);
     return sendMsg(signallingMsg);
 }
 
@@ -470,7 +470,7 @@ bool HyperCubeClientCore::SignallingObject::subscribe(void)
     //cout << "Send Subscribe sid:" << to_string(systemId) << " gid:" << to_string(_groupId) << "\n";
     command = j.dump();
     SigMsg signallingMsg(command);
-    LOG_INFOD("HyperCubeClientCore::subscribe()", "", 0);
+    LOG_INFO("HyperCubeClientCore::subscribe()", "", 0);
     return sendMsg(signallingMsg);
 }
 
@@ -528,7 +528,7 @@ bool HyperCubeClientCore::sendPacket(Packet::UniquePtr& ppacket)
 bool HyperCubeClientCore::onConnect(void)
 {
     std::string line = "connected on socket# " + std::to_string(client.getSocket());
-    LOG_INFOD("HyperCubeClientCore::onConnect()", line, 0);
+    LOG_INFO("HyperCubeClientCore::onConnect()", line, 0);
     signallingObject.onConnect();
     receiveActivity.onConnect();
     sendActivity.onConnect();
@@ -538,7 +538,7 @@ bool HyperCubeClientCore::onConnect(void)
 bool HyperCubeClientCore::onDisconnect(void)
 {
     std::string line = "disconnect on socket# " + std::to_string(client.getSocket());
-    LOG_INFOD("HyperCubeClientCore::onDisconnect()", line, 0);
+    LOG_INFO("HyperCubeClientCore::onDisconnect()", line, 0);
     client.close();
     signallingObject.onDisconnect();
     receiveActivity.onDisconnect();

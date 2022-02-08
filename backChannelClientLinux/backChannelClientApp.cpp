@@ -46,9 +46,9 @@ bool HyperCubeClientShell::doEchoTest(void)
     double avgTime = (totalTime / totalTests) * 1000000;
     double avgBytes = ((double)totalBytesSent / (double)totalTests);
     double totalBPS = ((double)(totalBytesSent * 8) / totalTime) / 1000000.0;
-    LOG_INFOD("HyperCubeClient::doEchoTest()", "Avg time per test (us): " + std::to_string(avgTime), 0);
-    LOG_INFOD("HyperCubeClient::doEchoTest()", "Avg bytes per test : " + std::to_string((int)avgBytes), 0);
-    LOG_INFOD("HyperCubeClient::doEchoTest()", "MBps: " + std::to_string(totalBPS), 0);
+    LOG_INFO("HyperCubeClient::doEchoTest()", "Avg time per test (us): " + std::to_string(avgTime), 0);
+    LOG_INFO("HyperCubeClient::doEchoTest()", "Avg bytes per test : " + std::to_string((int)avgBytes), 0);
+    LOG_INFO("HyperCubeClient::doEchoTest()", "MBps: " + std::to_string(totalBPS), 0);
     return true;
 }
 
