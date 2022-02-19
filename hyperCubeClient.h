@@ -94,6 +94,7 @@ class HyperCubeClientCore : IHyperCubeClientCore
             CstdConditional eventDisconnectedFromServer;
             std::atomic<bool> connected = false;
             std::atomic<bool> justDisconnected = false;
+            bool alreadyWarnedOfFailedConnectionAttempt = false;
 
             IHyperCubeClientCore* pIHyperCubeClientCore = 0;
             bool socketValid(void) { return pIHyperCubeClientCore->tcpSocketValid(); }

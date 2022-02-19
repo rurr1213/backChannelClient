@@ -295,9 +295,13 @@ bool HyperCubeClientCore::SignallingObject::connectIfNotConnected(void)
             pIHyperCubeClientCore->onConnect();
             setupConnection();
             connected = true;
+            alreadyWarnedOfFailedConnectionAttempt = false;
+        } else {
+            if (!alreadyWarnedOfFailedConnectionAttempt) {
+                LOG_WARNING("HyperCubeClientCore::connectIfNotConnected()", "connection failed to " + serverIpAddress, 0);
+                alreadyWarnedOfFailedConnectionAttempt = true;
+            }
         }
-        else
-            LOG_WARNING("HyperCubeClientCore::connectIfNotConnected()", "connection failed to " + serverIpAddress, 0);
         eventDisconnectedFromServer.reset();
 
     }
@@ -538,7 +542,7 @@ bool HyperCubeClientCore::onConnect(void)
 bool HyperCubeClientCore::onDisconnect(void)
 {
     std::string line = "disconnect on socket# " + std::to_string(client.getSocket());
-    LOG_INFO("HyperCubeClientCore::onDisconnect()", line, 0);
+    LOG_WARNING("HyperCubeClientCore::onDisconnect()", line, 0);
     client.close();
     signallingObject.onDisconnect();
     receiveActivity.onDisconnect();
