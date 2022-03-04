@@ -26,9 +26,11 @@ public:
 
     virtual bool sendMsg(Msg& msg) = 0;
     virtual bool onReceivedData(void) = 0;
-    virtual bool onConnect(void) = 0;
-    virtual bool onDisconnect(void) = 0;
+    virtual bool onConnect(void) = 0;   // tcp connection established
+    virtual bool onDisconnect(void) = 0;    // tcp connection closed
     virtual bool isSignallingMsg(std::unique_ptr<Packet>& rppacket) = 0;
+    virtual bool onOpenForData(void) = 0;  // open for data
+    virtual bool onClosedForData(void) = 0; // closed for data
 };
 
 class HyperCubeClientCore : IHyperCubeClientCore
@@ -126,6 +128,8 @@ class HyperCubeClientCore : IHyperCubeClientCore
 
         virtual bool onConnect(void);
         virtual bool onDisconnect(void);
+        virtual bool onOpenForData(void);
+        virtual bool onClosedForData(void);
         virtual bool isSignallingMsg(std::unique_ptr<Packet>& rppacket);
         virtual bool onReceivedData(void);
 
@@ -155,6 +159,7 @@ public:
 
         virtual bool sendMsg(Msg& msg);
         bool recvMsg(Msg& msg);
+        bool getPacket(Packet& packet);
 
 //        bool peekMsg(Msg& msg);
 

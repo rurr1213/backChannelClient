@@ -347,6 +347,24 @@ bool HyperCubeClientCore::SignallingObject::processSigMsgJson(const Packet* ppac
             LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received LocalPing" + line, 0);
             msgProcessed = true;
         }
+        if (command == "subscribeAck") {
+            LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received subscribeAck" + line, 0);
+            msgProcessed = true;
+        }
+        if (command == "unsubscribeAck") {
+            LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received unsubscribeAck" + line, 0);
+            msgProcessed = true;
+        }
+        if (command == "subscriber") {
+            LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received subscriber" + line, 0);
+            pIHyperCubeClientCore->onOpenForData();
+            msgProcessed = true;
+        }
+        if (command == "unsubscriber") {
+            LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received unsubscriber" + line, 0);
+            pIHyperCubeClientCore->onClosedForData();
+            msgProcessed = true;
+        }
     }
     catch (std::exception& e) {
         LOG_WARNING("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "Failed to decode json" + std::string(e.what()), 0);
@@ -379,9 +397,7 @@ bool HyperCubeClientCore::SignallingObject::setupConnection(void)
 {
     //sendEcho();
     sendLocalPing();
-    createGroup("Matrix group");
-    createGroup("Matrix group2");
-    createGroup("Matrix group3");
+    createGroup("12345");
     LOG_INFO("HyperCubeClientCore::SignallingObject::setupConnection()", "done setup", 0);
     return true;
 }
@@ -404,7 +420,7 @@ bool HyperCubeClientCore::SignallingObject::sendEcho(void)
 
 bool HyperCubeClientCore::SignallingObject::sendLocalPing(void)
 {
-    std::string pingData = "";
+    std::string pingData = "12345";
     json j = {
         { "command", "localPing" },
         { "systemId", systemId },
@@ -443,7 +459,7 @@ bool HyperCubeClientCore::SignallingObject::publish(void)
 
 bool HyperCubeClientCore::SignallingObject::createGroup(std::string _groupName)
 {
-    string command; 
+    string command;
     json j = {
         { "command", "createGroup" },
         { "systemId", systemId },
@@ -458,7 +474,6 @@ bool HyperCubeClientCore::SignallingObject::createGroup(std::string _groupName)
     LOG_INFO("HyperCubeClientCore::createGroup()", "", 0);
     return sendMsg(signallingMsg);
 }
-
 
 bool HyperCubeClientCore::SignallingObject::subscribe(void)
 {
@@ -550,6 +565,16 @@ bool HyperCubeClientCore::onDisconnect(void)
     return true;
 }
 
+bool HyperCubeClientCore::onOpenForData(void)
+{
+    return true;
+}
+
+bool HyperCubeClientCore::onClosedForData(void)
+{
+    return true;
+}
+
 bool HyperCubeClientCore::isSignallingMsg(std::unique_ptr<Packet>& rppacket)
 {
     return signallingObject.isSignallingMsg(rppacket);
@@ -582,6 +607,14 @@ bool HyperCubeClientCore::recvMsg(Msg& msg) {
     bool stat = receiveActivity.recvPacket(ppacket);
     if (stat)
         mserdes.packetToMsg(ppacket.get(), msg);
+    return stat;
+}
+
+bool HyperCubeClientCore::getPacket(Packet& packet) 
+{
+    Packet::UniquePtr ppacket = 0;
+    bool stat = receiveActivity.recvPacket(ppacket);
+    if (stat) packet = std::move(*ppacket);
     return stat;
 }
 
