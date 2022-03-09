@@ -18,7 +18,7 @@ HyperCubeClient::HyperCubeClient() :
     threadSafeWritePacketBuilder(COMMON_PACKETSIZE_MAX)
 {
     std::srand(std::time(nullptr));
-    systemId = std::rand();
+    connectionId = std::rand();
 };
 
 HyperCubeClient::~HyperCubeClient() {
@@ -210,7 +210,7 @@ bool HyperCubeClient::sendLocalPing(void)
     std::string pingData = "";
     json j = {
         { "command", "localPing" },
-        { "systemId", systemId },
+        { "connectionId", connectionId },
         { "data", pingData }
     };
 
@@ -228,14 +228,14 @@ bool HyperCubeClient::publish(void)
 
     json j = {
         { "command", "publish" },
-        { "systemId", systemId },
+        { "connectionId", connectionId },
         { "groupId", _groupId }
     };
 
-    cout << to_string(systemId);
+    cout << to_string(connectionId);
     command = j.dump();
 
-    cout << "Send Publish sid:" << to_string(systemId) << " gid:" << to_string(_groupId) << "\n";
+    cout << "Send Publish sid:" << to_string(connectionId) << " gid:" << to_string(_groupId) << "\n";
 
     SigMsg signallingMsg(command);
     return sendMsg(signallingMsg);
@@ -246,13 +246,13 @@ bool HyperCubeClient::createGroup(std::string _groupName)
     string command; 
     json j = {
         { "command", "createGroup" },
-        { "systemId", systemId },
+        { "connectionId", connectionId },
         { "groupName", _groupName }
     };
 
-    cout << "Send CreateGroup sid:" << to_string(systemId) << " gin:" << _groupName << "\n";
+    cout << "Send CreateGroup sid:" << to_string(connectionId) << " gin:" << _groupName << "\n";
 
-    cout << to_string(systemId);
+    cout << to_string(connectionId);
     command = j.dump();
 
     SigMsg signallingMsg(command);
@@ -267,11 +267,11 @@ bool HyperCubeClient::subscribe(void)
 
     json j = {
         { "command", "subscribe" },
-        { "systemId", systemId },
+        { "connectionId", connectionId },
         { "groupId", _groupId }
     };
 
-    cout << "Send Subscribe sid:" << to_string(systemId) << " gid:" << to_string(_groupId) << "\n";
+    cout << "Send Subscribe sid:" << to_string(connectionId) << " gid:" << to_string(_groupId) << "\n";
     command = j.dump();
     SigMsg signallingMsg(command);
     return sendMsg(signallingMsg);
