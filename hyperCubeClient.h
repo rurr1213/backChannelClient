@@ -9,6 +9,11 @@
 
 #define HYPERCUBE_CONNECTIONINTERVAL_MS 8000			// connection attempt interval in milliseconds
 
+#ifdef _WIN64
+#define uint128_t   UUID
+#else
+#define uint128_t   __int128
+#endif
 
 class IHyperCubeClientCore
 {
@@ -108,15 +113,20 @@ class HyperCubeClientCore : IHyperCubeClientCore
             bool sendMsg(Msg& msg) {
                 return pIHyperCubeClientCore->sendMsg(msg);
             }
+            bool sendConnectionInfo(std::string _connectionName);
             bool createGroup(std::string _groupName);
             bool publish(void);
-            bool subscribe(void);
+            bool subscribe(std::string _groupName);
             bool sendEcho(void);
             bool sendLocalPing(void);
             bool setupConnection(void);
 
+            bool onCreateGroupAck(const json& jsonData);
+            bool onConnectionInfoAck(const json& jsonData);
+
         public:
-            uint64_t systemId;
+            uint64_t connectionId;
+            uuid_t applicationInstanceUUID;
 
             SignallingObject(IHyperCubeClientCore* _pIHyperCubeClientCore);
             void init(std::string _serverIpAddress);
