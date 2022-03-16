@@ -29,7 +29,7 @@ public:
     int tcpRecv(char* buf, const int bufSize) { return rtcpClient.recv(buf, bufSize); }
     int tcpSend(const char* buf, const int bufSize) { return rtcpClient.send(buf, bufSize); }
 
-    virtual bool sendMsg(Msg& msg) = 0;
+    virtual bool sendMsgOut(Msg& msg) = 0;
     virtual bool onReceivedData(void) = 0;
     virtual bool onConnect(void) = 0;   // tcp connection established
     virtual bool onDisconnect(void) = 0;    // tcp connection closed
@@ -68,7 +68,7 @@ class HyperCubeClientCore : IHyperCubeClientCore
             RecvActivity(IHyperCubeClientCore* pIHyperCubeClientCore, SignallingObject& _signallingObject);
             bool init(void);
             bool deinit(void);
-            bool recvPacket(Packet::UniquePtr& rppacket);
+            bool receiveIn(Packet::UniquePtr& rppacket);
             bool onConnect(void);
             bool onDisconnect(void);
         };
@@ -84,14 +84,14 @@ class HyperCubeClientCore : IHyperCubeClientCore
 
             CstdConditional eventPacketsAvailableToSend;
             int totalBytesSent = 0;
-            int sendData(const void* pdata, const int dataLen);
+            int sendDataOut(const void* pdata, const int dataLen);
 
         public:
             SendActivity(IHyperCubeClientCore* _pIHyperCubeClientCore);
             ~SendActivity();
             bool init(void);
             bool deinit(void);
-            bool sendPacket(Packet::UniquePtr& rppacket);
+            bool sendOut(Packet::UniquePtr& rppacket);
             bool onConnect(void);
             bool onDisconnect(void);
         };
@@ -110,8 +110,8 @@ class HyperCubeClientCore : IHyperCubeClientCore
             bool connectIfNotConnected(void);
             bool processSigMsgJson(const Packet* ppacket);
             bool threadFunction(void);
-            bool sendMsg(Msg& msg) {
-                return pIHyperCubeClientCore->sendMsg(msg);
+            bool sendMsgOut(Msg& msg) {
+                return pIHyperCubeClientCore->sendMsgOut(msg);
             }
             bool sendConnectionInfo(std::string _connectionName);
             bool createGroup(std::string _groupName);
@@ -163,6 +163,9 @@ protected:
         double totalTime = 0;
         std::string dataString;
 
+protected:
+        bool sendMsgOut(Msg& msg);
+
 public:
         HyperCubeClientCore();
         ~HyperCubeClientCore();
@@ -172,7 +175,6 @@ public:
 
         virtual bool connectionClosed(void) { return true; };
 
-        virtual bool sendMsg(Msg& msg);
         bool recvMsg(Msg& msg);
         bool getPacket(Packet& packet);
 

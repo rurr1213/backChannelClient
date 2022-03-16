@@ -135,7 +135,7 @@ bool HyperCubeClientCore::RecvActivity::onDisconnect(void)
 }
 
 
-bool HyperCubeClientCore::RecvActivity::recvPacket(Packet::UniquePtr& rppacket) {
+bool HyperCubeClientCore::RecvActivity::receiveIn(Packet::UniquePtr& rppacket) {
     bool stat = inPacketQ.pop(rppacket);
     return stat;
 }
@@ -198,7 +198,7 @@ bool HyperCubeClientCore::SendActivity::writePacket(void)
     }
 
     // send whats in packet builder
-    int numSent = sendData(writePacketBuilder.getpData(), writePacketBuilder.getLength());
+    int numSent = sendDataOut(writePacketBuilder.getpData(), writePacketBuilder.getLength());
 
     if (numSent < 0) numSent = 0;
     totalBytesSent += numSent;
@@ -216,14 +216,14 @@ bool HyperCubeClientCore::SendActivity::writePackets(void)
     return sendDone;
 }
 
-bool HyperCubeClientCore::SendActivity::sendPacket(Packet::UniquePtr& rppacket) 
+bool HyperCubeClientCore::SendActivity::sendOut(Packet::UniquePtr& rppacket) 
 {
     outPacketQ.push(rppacket);
     eventPacketsAvailableToSend.notify();
     return true;
 }
 
-int HyperCubeClientCore::SendActivity::sendData(const void* pdata, const int dataLen)
+int HyperCubeClientCore::SendActivity::sendDataOut(const void* pdata, const int dataLen)
 {
     return pIHyperCubeClientCore->tcpSend((char*)pdata, dataLen);
 }
@@ -498,7 +498,7 @@ bool HyperCubeClientCore::SignallingObject::echoData(std::string echoData)
     string command = j.dump();
     MsgCmd msgCmd(command);
     LOG_INFO("HyperCubeClientCore::echoData()", "", 0);
-    return sendMsg(msgCmd);
+    return sendMsgOut(msgCmd);
 }
 
 bool HyperCubeClientCore::SignallingObject::localPing(bool ack, std::string data)
@@ -512,7 +512,7 @@ bool HyperCubeClientCore::SignallingObject::localPing(bool ack, std::string data
     string command = j.dump();
     SigMsg msgCmd(command);
     LOG_INFO("HyperCubeClientCore::localPing()", "", 0);
-    return sendMsg(msgCmd);
+    return sendMsgOut(msgCmd);
 }
 
 bool HyperCubeClientCore::SignallingObject::remotePing(bool ack, std::string data)
@@ -526,7 +526,7 @@ bool HyperCubeClientCore::SignallingObject::remotePing(bool ack, std::string dat
     string command = j.dump();
     SigMsg msgCmd(command);
     LOG_INFO("HyperCubeClientCore::remotePing()", "", 0);
-    return sendMsg(msgCmd);
+    return sendMsgOut(msgCmd);
 }
 
 
@@ -547,7 +547,7 @@ bool HyperCubeClientCore::SignallingObject::publish(void)
 
     SigMsg signallingMsg(command);
     LOG_INFO("HyperCubeClientCore::publish()", "", 0);
-    return sendMsg(signallingMsg);
+    return sendMsgOut(signallingMsg);
 }
 
 bool HyperCubeClientCore::SignallingObject::sendConnectionInfo(std::string _connectionName)
@@ -569,7 +569,7 @@ bool HyperCubeClientCore::SignallingObject::sendConnectionInfo(std::string _conn
 
     SigMsg signallingMsg(command);
     LOG_INFO("HyperCubeClientCore::sendConnectionInfo()", "", 0);
-    return sendMsg(signallingMsg);
+    return sendMsgOut(signallingMsg);
 }
 
 bool HyperCubeClientCore::SignallingObject::createGroup(std::string _groupName)
@@ -583,7 +583,7 @@ bool HyperCubeClientCore::SignallingObject::createGroup(std::string _groupName)
 
     SigMsg signallingMsg(command);
     LOG_INFO("HyperCubeClientCore::createGroup()", "", 0);
-    return sendMsg(signallingMsg);
+    return sendMsgOut(signallingMsg);
 }
 
 bool HyperCubeClientCore::SignallingObject::subscribe(std::string _groupName)
@@ -599,7 +599,7 @@ bool HyperCubeClientCore::SignallingObject::subscribe(std::string _groupName)
     command = j.dump();
     SigMsg signallingMsg(command);
     LOG_INFO("HyperCubeClientCore::subscribe()", "", 0);
-    return sendMsg(signallingMsg);
+    return sendMsgOut(signallingMsg);
 }
 
 // ------------------------------------------------------------------------------------------------
@@ -635,7 +635,7 @@ bool HyperCubeClientCore::deinit(void)
 
 
 /*
-bool HyperCubeClientCore::sendPacket(Packet::UniquePtr& ppacket)
+bool HyperCubeClientCore::sendOut(Packet::UniquePtr& ppacket)
 {
     Packet* packet = ppacket.get();
 
@@ -695,11 +695,11 @@ bool HyperCubeClientCore::onReceivedData(void)
 }
 
 
-bool HyperCubeClientCore::sendMsg(Msg& msg) {
+bool HyperCubeClientCore::sendMsgOut(Msg& msg) {
     Packet::UniquePtr ppacket = 0;
     ppacket = Packet::create();
     mserdes.msgToPacket(msg, ppacket);
-    bool stat = sendActivity.sendPacket(ppacket);
+    bool stat = sendActivity.sendOut(ppacket);
     return stat;
 }
 
@@ -713,7 +713,7 @@ bool HyperCubeClientCore::peekMsg(Msg& msg) {
 
 bool HyperCubeClientCore::recvMsg(Msg& msg) {
     Packet::UniquePtr ppacket = 0;
-    bool stat = receiveActivity.recvPacket(ppacket);
+    bool stat = receiveActivity.receiveIn(ppacket);
     if (stat)
         mserdes.packetToMsg(ppacket.get(), msg);
     return stat;
@@ -722,7 +722,7 @@ bool HyperCubeClientCore::recvMsg(Msg& msg) {
 bool HyperCubeClientCore::getPacket(Packet& packet) 
 {
     Packet::UniquePtr ppacket = 0;
-    bool stat = receiveActivity.recvPacket(ppacket);
+    bool stat = receiveActivity.receiveIn(ppacket);
     if (stat) packet = std::move(*ppacket);
     return stat;
 }
@@ -764,7 +764,7 @@ bool HyperCubeClientCore::processInputMsgs(std::string sentString) {
                             std::string data = jsonData["data"];
                             jsonData["command"]="echoAck";
                             MsgCmd msgCmd(jsonData.dump());
-                            stat = sendMsg(msgCmd);
+                            stat = sendMsgOut(msgCmd);
                             std::cout << "received " + mserdes.to_string(msgCmd) + jsonData.dump() + "\n";
                             msgProcessed = true;
                             break;
@@ -877,7 +877,7 @@ bool HyperCubeClient::doShell(void)
                 cout << "Sent SEND\n";
                 string command = "SEND "; command += dataString + std::to_string(msgNum++);
                 MsgCmd cmdMsg(command);
-                sendMsg(cmdMsg);
+                sendMsgOut(cmdMsg);
             }
             break;
             case 'e':
@@ -887,7 +887,7 @@ bool HyperCubeClient::doShell(void)
             {
                 exitNow = true;
                 MsgCmd cmdMsg("EXIT");
-                sendMsg(cmdMsg);
+                sendMsgOut(cmdMsg);
                 usleep(100000);
             }
             break;
@@ -896,7 +896,7 @@ bool HyperCubeClient::doShell(void)
                 string command = "ECHO"; command += to_string(100) + ",";
                 while (true) {
                     MsgCmd cmdMsg(command);
-                    sendMsg(cmdMsg);
+                    sendMsgOut(cmdMsg);
                     usleep(100000);
                 }
             }
