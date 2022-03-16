@@ -117,12 +117,15 @@ class HyperCubeClientCore : IHyperCubeClientCore
             bool createGroup(std::string _groupName);
             bool publish(void);
             bool subscribe(std::string _groupName);
-            bool sendEcho(void);
-            bool sendLocalPing(void);
+            bool echoData(std::string data = "");
+            bool localPing(bool ack = false, std::string data = "localPingFromMatrix");
+            bool remotePing(bool ack = false, std::string data = "remotePingFromMatrix");
             bool setupConnection(void);
 
             bool onCreateGroupAck(const json& jsonData);
             bool onConnectionInfoAck(const json& jsonData);
+            bool onRemotePing(const json& jsonData);
+            bool onEchoData(const json& jsonData);
 
         public:
             uint64_t connectionId;
@@ -134,6 +137,8 @@ class HyperCubeClientCore : IHyperCubeClientCore
             virtual bool isSignallingMsg(std::unique_ptr<Packet>& rppacket);
             virtual bool onConnect(void);
             virtual bool onDisconnect(void);
+            virtual bool onOpenForData(void);
+            virtual bool onClosedForData(void);
         };
 
         virtual bool onConnect(void);
