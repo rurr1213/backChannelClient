@@ -36,7 +36,7 @@ bool BackChannelClient::setIP(std::string ipAddress)
 	return true;
 }
 
-
+/*
 bool BackChannelClient::readPackets(void)
 {
 	return true;
@@ -51,3 +51,4 @@ bool BackChannelClient::connectionClosed(void)
 {
 	return true;
 }
+*/

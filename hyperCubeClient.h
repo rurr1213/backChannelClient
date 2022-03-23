@@ -58,6 +58,7 @@ class HyperCubeClientCore : IHyperCubeClientCore
         private:
             IHyperCubeClientCore* pIHyperCubeClientCore = 0;
             RecvPacketBuilder recvPacketBuilder;
+            std::mutex recvPacketBuilderLock;
             PacketQWithLock inPacketQ;
             std::unique_ptr<Packet> pinputPacket = 0;
             CstdConditional eventReadyToRead;
@@ -77,6 +78,7 @@ class HyperCubeClientCore : IHyperCubeClientCore
         private:
             IHyperCubeClientCore* pIHyperCubeClientCore = 0;
             WritePacketBuilder writePacketBuilder;
+            std::mutex writePacketBuilderLock;
             PacketQWithLock outPacketQ;
             virtual bool threadFunction(void);
             bool writePacket(void);
@@ -162,6 +164,8 @@ protected:
 
         double totalTime = 0;
         std::string dataString;
+
+        int numOutputMsgs = 0;
 
 protected:
         bool sendMsgOut(Msg& msg);

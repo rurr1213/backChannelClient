@@ -70,6 +70,7 @@ HyperCubeClientCore::RecvActivity::RecvActivity(IHyperCubeClientCore* pIHyperCub
 bool HyperCubeClientCore::RecvActivity::init(void) 
 {
     eventReadyToRead.reset();
+    std::lock_guard<std::mutex> lock(recvPacketBuilderLock);
     recvPacketBuilder.init();
     pinputPacket = std::make_unique<Packet>();
     CstdThread::init(true);
@@ -78,6 +79,7 @@ bool HyperCubeClientCore::RecvActivity::init(void)
 bool HyperCubeClientCore::RecvActivity::deinit(void) 
 {
     eventReadyToRead.notify();
+    std::lock_guard<std::mutex> lock(recvPacketBuilderLock);
     recvPacketBuilder.deinit();
     Packet* packet = pinputPacket.release();
     if (packet) delete packet;
@@ -105,6 +107,8 @@ bool HyperCubeClientCore::RecvActivity::threadFunction(void)
 
 bool HyperCubeClientCore::RecvActivity::readPackets(void)
 {
+    std::lock_guard<std::mutex> lock(recvPacketBuilderLock);
+
     bool stat = recvPacketBuilder.readPacket(*pinputPacket);
     if (stat) {
         if (!pIHyperCubeClientCore->isSignallingMsg(pinputPacket)) {
@@ -151,6 +155,7 @@ HyperCubeClientCore::SendActivity::SendActivity(IHyperCubeClientCore* _pIHyperCu
 HyperCubeClientCore::SendActivity::~SendActivity() {};
 
 bool HyperCubeClientCore::SendActivity::init(void) {
+    std::lock_guard<std::mutex> lock(writePacketBuilderLock);
     writePacketBuilder.init();
     eventPacketsAvailableToSend.reset();
     CstdThread::init(true);
@@ -161,6 +166,7 @@ bool HyperCubeClientCore::SendActivity::deinit(void) {
     CstdThread::setShouldExit();
     eventPacketsAvailableToSend.notify();
     CstdThread::deinit(true);
+    std::lock_guard<std::mutex> lock(writePacketBuilderLock);
     writePacketBuilder.deinit();
     outPacketQ.deinit();
     return true;
@@ -183,6 +189,7 @@ bool HyperCubeClientCore::SendActivity::threadFunction(void)
 
 bool HyperCubeClientCore::SendActivity::writePacket(void)
 {
+    std::lock_guard<std::mutex> lock(writePacketBuilderLock);
     Packet* packet = 0;
 
     // load packet builder if needed
@@ -230,6 +237,7 @@ int HyperCubeClientCore::SendActivity::sendDataOut(const void* pdata, const int 
 
 bool HyperCubeClientCore::SendActivity::onConnect(void)
 {
+    std::lock_guard<std::mutex> lock(writePacketBuilderLock);
     writePacketBuilder.init();
     outPacketQ.init();
     return true;
@@ -237,6 +245,7 @@ bool HyperCubeClientCore::SendActivity::onConnect(void)
 
 bool HyperCubeClientCore::SendActivity::onDisconnect(void)
 {
+    std::lock_guard<std::mutex> lock(writePacketBuilderLock);
     writePacketBuilder.deinit();
     outPacketQ.deinit();
     return true;
@@ -465,8 +474,12 @@ bool HyperCubeClientCore::SignallingObject::onDisconnect(void)
 bool HyperCubeClientCore::SignallingObject::onOpenForData(void)
 {
 //    localPing();
-    remotePing();
-//    pIHyperCubeClientCore->onOpenForData();
+/*/
+    for (int i = 0; i < 100; i++) {
+        remotePing();
+    }
+    */
+    pIHyperCubeClientCore->onOpenForData();
     return true;
 }
 
@@ -700,6 +713,7 @@ bool HyperCubeClientCore::sendMsgOut(Msg& msg) {
     ppacket = Packet::create();
     mserdes.msgToPacket(msg, ppacket);
     bool stat = sendActivity.sendOut(ppacket);
+    LOG_STATEINT("HyperCubeClientCore-numOutputMsgs", ++numOutputMsgs);
     return stat;
 }
 
