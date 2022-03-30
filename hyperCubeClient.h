@@ -179,7 +179,7 @@ public:
 
         virtual bool connectionClosed(void) { return true; };
 
-        bool recvMsg(Msg& msg);
+//        bool recvMsg(Msg& msg);
         bool getPacket(Packet& packet);
 
 //        bool peekMsg(Msg& msg);

@@ -113,7 +113,6 @@ RecvPacketBuilder::READSTATUS HyperCubeClientCore::RecvActivity::readPackets(voi
     RecvPacketBuilder::READSTATUS readStatus = recvPacketBuilder.readPacket(*pinputPacket);
     if (readStatus== RecvPacketBuilder::READSTATUS::NEEDEDDATAREAD) {
         if (!pIHyperCubeClientCore->isSignallingMsg(pinputPacket)) {
- unique_ptr<Msg> pmsg = MsgExt::create(pinputPacket.get());
             inPacketQ.push(pinputPacket);
             pinputPacket = std::make_unique<Packet>();
             pIHyperCubeClientCore->onReceivedData();
@@ -726,16 +725,16 @@ bool HyperCubeClientCore::peekMsg(Msg& msg) {
 }
 */
 
+/*
 bool HyperCubeClientCore::recvMsg(Msg& msg) {
     Packet::UniquePtr ppacket = 0;
     bool stat = receiveActivity.receiveIn(ppacket);
     if (stat) {
         mserdes.packetToMsg(ppacket.get(), msg);
-        unique_ptr<Msg> pmsg = MsgExt::create(ppacket.get());
     }
     return stat;
 }
-
+*/
 bool HyperCubeClientCore::getPacket(Packet& packet) 
 {
     Packet::UniquePtr ppacket = 0;
