@@ -10,6 +10,7 @@
 #include "mserdes.h"
 #include "kbhit.h"
 #include "clockGetTime.h"
+#include "MsgExt.h"
 
 #include "json.hpp"
 using json = nlohmann::json;
@@ -93,10 +94,10 @@ bool HyperCubeClientCore::RecvActivity::threadFunction(void)
     do {
         eventReadyToRead.wait();
         if (checkIfShouldExit()) break;
-        if (readPackets()) {
+        RecvPacketBuilder::READSTATUS readStatus = readPackets();
+        if (readStatus== RecvPacketBuilder::READSTATUS::NEEDEDDATAREAD) {
             pIHyperCubeClientCore->onReceivedData();
-        }
-        else {
+        } else if (readStatus == RecvPacketBuilder::READSTATUS::READERROR) {
             pIHyperCubeClientCore->onDisconnect();
             eventReadyToRead.reset();
         }
@@ -105,19 +106,20 @@ bool HyperCubeClientCore::RecvActivity::threadFunction(void)
     return true;
 }
 
-bool HyperCubeClientCore::RecvActivity::readPackets(void)
+RecvPacketBuilder::READSTATUS HyperCubeClientCore::RecvActivity::readPackets(void)
 {
     std::lock_guard<std::mutex> lock(recvPacketBuilderLock);
 
-    bool stat = recvPacketBuilder.readPacket(*pinputPacket);
-    if (stat) {
+    RecvPacketBuilder::READSTATUS readStatus = recvPacketBuilder.readPacket(*pinputPacket);
+    if (readStatus== RecvPacketBuilder::READSTATUS::NEEDEDDATAREAD) {
         if (!pIHyperCubeClientCore->isSignallingMsg(pinputPacket)) {
+ unique_ptr<Msg> pmsg = MsgExt::create(pinputPacket.get());
             inPacketQ.push(pinputPacket);
             pinputPacket = std::make_unique<Packet>();
             pIHyperCubeClientCore->onReceivedData();
         }
     }
-    return stat;
+    return readStatus;
 }
 
 int HyperCubeClientCore::RecvActivity::readData(void* pdata, int dataLen)
@@ -443,6 +445,11 @@ bool HyperCubeClientCore::SignallingObject::processSigMsgJson(const Packet* ppac
             onClosedForData();
             msgProcessed = true;
         }
+        if (command == "closedForData") {
+            LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received onClosedForData" + logLineData, 0);
+            onClosedForData();
+            msgProcessed = true;
+        }
     }
     catch (std::exception& e) {
         LOG_WARNING("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "Failed to decode json" + std::string(e.what()), 0);
@@ -473,19 +480,13 @@ bool HyperCubeClientCore::SignallingObject::onDisconnect(void)
 
 bool HyperCubeClientCore::SignallingObject::onOpenForData(void)
 {
-//    localPing();
-/*/
-    for (int i = 0; i < 100; i++) {
-        remotePing();
-    }
-    */
     pIHyperCubeClientCore->onOpenForData();
     return true;
 }
 
 bool HyperCubeClientCore::SignallingObject::onClosedForData(void)
 {
-//    pIHyperCubeClientCore->onClosedForData();
+    pIHyperCubeClientCore->onClosedForData();
     return true;
 }
 
@@ -728,8 +729,10 @@ bool HyperCubeClientCore::peekMsg(Msg& msg) {
 bool HyperCubeClientCore::recvMsg(Msg& msg) {
     Packet::UniquePtr ppacket = 0;
     bool stat = receiveActivity.receiveIn(ppacket);
-    if (stat)
+    if (stat) {
         mserdes.packetToMsg(ppacket.get(), msg);
+        unique_ptr<Msg> pmsg = MsgExt::create(ppacket.get());
+    }
     return stat;
 }
 

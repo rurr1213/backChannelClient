@@ -63,7 +63,7 @@ class HyperCubeClientCore : IHyperCubeClientCore
             std::unique_ptr<Packet> pinputPacket = 0;
             CstdConditional eventReadyToRead;
             virtual bool threadFunction(void);
-            bool readPackets(void);
+            RecvPacketBuilder::READSTATUS readPackets(void);
             int readData(void* pdata, int dataLen);
         public:
             RecvActivity(IHyperCubeClientCore* pIHyperCubeClientCore, SignallingObject& _signallingObject);
