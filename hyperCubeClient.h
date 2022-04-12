@@ -104,6 +104,8 @@ class HyperCubeClientCore : IHyperCubeClientCore
             std::atomic<bool> connected = false;
             std::atomic<bool> justDisconnected = false;
             bool alreadyWarnedOfFailedConnectionAttempt = false;
+            int numFailedConnectionAttempts = 0;
+            int numSuccessfullConnectionAttempts = 0;
 
             IHyperCubeClientCore* pIHyperCubeClientCore = 0;
             bool socketValid(void) { return pIHyperCubeClientCore->tcpSocketValid(); }
@@ -148,7 +150,6 @@ class HyperCubeClientCore : IHyperCubeClientCore
         virtual bool onOpenForData(void);
         virtual bool onClosedForData(void);
         virtual bool isSignallingMsg(std::unique_ptr<Packet>& rppacket);
-        virtual bool onReceivedData(void);
 
 protected:
 
@@ -166,10 +167,11 @@ protected:
         std::string dataString;
 
         int numOutputMsgs = 0;
+        int numInputMsgs = 0;
 
 protected:
         bool sendMsgOut(Msg& msg);
-
+        virtual bool onReceivedData(void);
 public:
         HyperCubeClientCore();
         ~HyperCubeClientCore();
@@ -179,15 +181,9 @@ public:
 
         virtual bool connectionClosed(void) { return true; };
 
-//        bool recvMsg(Msg& msg);
         bool getPacket(Packet& packet);
 
-//        bool peekMsg(Msg& msg);
-
         SOCKET getSocket(void) { return client.getSocket(); }
-
-//        bool printRcvdMsgCmds(std::string sentString);
-//        bool processInputMsgs(std::string sentString);
 };
 
 class HyperCubeClient : public HyperCubeClientCore

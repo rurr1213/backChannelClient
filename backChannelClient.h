@@ -5,9 +5,6 @@
 
 class BackChannelClient : public HyperCubeClient
 {
-//	bool readPackets(void);
-//	bool writePackets(void);
-//	virtual bool connectionClosed(void);
 public:
 	BackChannelClient();
 	~BackChannelClient();

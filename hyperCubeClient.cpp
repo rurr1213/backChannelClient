@@ -64,7 +64,6 @@ bool HyperCubeClientCore::PacketQWithLock::isEmpty(void)
 HyperCubeClientCore::RecvActivity::RecvActivity(IHyperCubeClientCore* pIHyperCubeClientCore, SignallingObject& _signallingObject) :
     CstdThread(this),
     pIHyperCubeClientCore{ pIHyperCubeClientCore },
-//    rsignallingObject{ _signallingObject },
     recvPacketBuilder(*this, COMMON_PACKETSIZE_MAX)
 {};
 
@@ -95,11 +94,21 @@ bool HyperCubeClientCore::RecvActivity::threadFunction(void)
         eventReadyToRead.wait();
         if (checkIfShouldExit()) break;
         RecvPacketBuilder::READSTATUS readStatus = readPackets();
-        if (readStatus== RecvPacketBuilder::READSTATUS::NEEDEDDATAREAD) {
-            pIHyperCubeClientCore->onReceivedData();
-        } else if (readStatus == RecvPacketBuilder::READSTATUS::READERROR) {
-            pIHyperCubeClientCore->onDisconnect();
-            eventReadyToRead.reset();
+        switch (readStatus) {
+            case RecvPacketBuilder::READSTATUS::NEEDEDDATAREAD:
+//                pIHyperCubeClientCore->onReceivedData();
+                break;
+            case RecvPacketBuilder::READSTATUS::READERROR:
+                LOG_WARNING("HyperCubeClientCore::RecvActivity::threadFunction()", "peer error", (int)readStatus);
+            case RecvPacketBuilder::READSTATUS::PEERSHUTDOWN:
+                pIHyperCubeClientCore->onDisconnect();
+                eventReadyToRead.reset();
+                break;
+            case RecvPacketBuilder::READSTATUS::MOREDATANEEDED:
+                break;
+            default:
+                LOG_WARNING("HyperCubeClientCore::RecvActivity::threadFunction()", "invalid state", (int)readStatus);
+                break;
         }
     } while (!checkIfShouldExit());
     exiting();
@@ -296,17 +305,23 @@ bool HyperCubeClientCore::SignallingObject::connectIfNotConnected(void)
     bool stat = true;
     if (!socketValid()) {
         if (justDisconnected) {
-            Sleep(2000);    // wait another second to give time, if just after a disconnect
+            // wait another second to give time, if just after a disconnect. 
+            // This is a seperate signalling thread, so ok to sleep here
+            Sleep(2000);    
             justDisconnected = false;
         }
         stat = connect();
+        LOG_STATESTRING("HyperCubeClientCore-ServerIP", serverIpAddress);
         if (stat) {
             LOG_INFO("HyperCubeClientCore::connectIfNotConnected()", "connected to " + serverIpAddress, 0);
             pIHyperCubeClientCore->onConnect();
             setupConnection();
             connected = true;
             alreadyWarnedOfFailedConnectionAttempt = false;
+            LOG_STATEINT("HyperCubeClientCore-NumSuccessfullConnectionAttempts", ++numSuccessfullConnectionAttempts);
         } else {
+            LOG_STATESTRING("HyperCubeClientCore-state", "disconnected");
+            LOG_STATEINT("HyperCubeClientCore-NumFailedConnectionAttempts", ++numFailedConnectionAttempts);
             if (!alreadyWarnedOfFailedConnectionAttempt) {
                 LOG_WARNING("HyperCubeClientCore::connectIfNotConnected()", "connection failed to " + serverIpAddress, 0);
                 alreadyWarnedOfFailedConnectionAttempt = true;
@@ -464,12 +479,14 @@ bool HyperCubeClientCore::SignallingObject::connect(void)
 
 bool HyperCubeClientCore::SignallingObject::onConnect(void)
 {
+    LOG_STATESTRING("HyperCubeClientCore-state", "connected");
     return true;
 }
 
 bool HyperCubeClientCore::SignallingObject::onDisconnect(void)
 {
     if (connected) {
+        LOG_STATESTRING("HyperCubeClientCore-state", "disconnected");
         connected = false;
         justDisconnected = true;
         eventDisconnectedFromServer.notify();
@@ -479,12 +496,14 @@ bool HyperCubeClientCore::SignallingObject::onDisconnect(void)
 
 bool HyperCubeClientCore::SignallingObject::onOpenForData(void)
 {
+    LOG_STATESTRING("HyperCubeClientCore-state", "openForData");
     pIHyperCubeClientCore->onOpenForData();
     return true;
 }
 
 bool HyperCubeClientCore::SignallingObject::onClosedForData(void)
 {
+    LOG_STATESTRING("HyperCubeClientCore-state", "closedForData");
     pIHyperCubeClientCore->onClosedForData();
     return true;
 }
@@ -684,6 +703,7 @@ bool HyperCubeClientCore::onDisconnect(void)
     signallingObject.onDisconnect();
     receiveActivity.onDisconnect();
     sendActivity.onDisconnect();
+    onClosedForData();
     return true;
 }
 
@@ -704,6 +724,7 @@ bool HyperCubeClientCore::isSignallingMsg(std::unique_ptr<Packet>& rppacket)
 
 bool HyperCubeClientCore::onReceivedData(void)
 {
+    LOG_STATEINT("HyperCubeClientCore-numInputMsgs", ++numInputMsgs);
     return true;
 }
 
