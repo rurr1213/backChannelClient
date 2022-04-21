@@ -79,7 +79,9 @@ bool HyperCubeClientCore::RecvActivity::init(void)
 bool HyperCubeClientCore::RecvActivity::deinit(void) 
 {
     eventReadyToRead.notify();
-    std::lock_guard<std::mutex> lock(recvPacketBuilderLock);
+    // locking here causes a deadlock during shutdown as readPackets() cannot get lock to shutdown
+    // No need to lock as its all being deinited anyway
+    //   std::lock_guard<std::mutex> lock(recvPacketBuilderLock);
     recvPacketBuilder.deinit();
     Packet* packet = pinputPacket.release();
     if (packet) delete packet;
@@ -96,7 +98,7 @@ bool HyperCubeClientCore::RecvActivity::threadFunction(void)
         RecvPacketBuilder::READSTATUS readStatus = readPackets();
         switch (readStatus) {
             case RecvPacketBuilder::READSTATUS::NEEDEDDATAREAD:
-//                pIHyperCubeClientCore->onReceivedData();
+                pIHyperCubeClientCore->onReceivedData();
                 break;
             case RecvPacketBuilder::READSTATUS::READERROR:
                 LOG_WARNING("HyperCubeClientCore::RecvActivity::threadFunction()", "peer error", (int)readStatus);
