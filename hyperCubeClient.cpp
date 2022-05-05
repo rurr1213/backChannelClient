@@ -17,7 +17,7 @@ HyperCubeClient::HyperCubeClient() :
     recvPacketBuilder(*this, COMMON_PACKETSIZE_MAX),
     threadSafeWritePacketBuilder(COMMON_PACKETSIZE_MAX)
 {
-    std::srand(std::time(nullptr));
+    //std::srand(std::time(nullptr));
     connectionId = std::rand();
 };
 
@@ -69,7 +69,7 @@ bool HyperCubeClient::sendPacket(Packet::UniquePtr& ppacket) {
 bool HyperCubeClient::recvPackets(void) {
     bool stat = false;
     while(client.isDataAvailable()) {
-        if (recvPacketBuilder.readPacket(*pinputPacket)) {
+        if (recvPacketBuilder.readPacket(*pinputPacket)==RecvPacketBuilder::READSTATUS::NEEDEDDATAREAD) {
             inPacketQ.push_back(std::move(pinputPacket));
             pinputPacket = std::make_unique<Packet>();
             stat = true;
@@ -144,9 +144,9 @@ bool HyperCubeClient::doEchoTest(void)
     double avgTime = (totalTime/totalTests)*1000000;
     double avgBytes = (totalBytesSent/totalTests);
     double totalBPS = ((double) (totalBytesSent*8) / totalTime)/1000000.0;
-    LOG_INFOD("HyperCubeClient::doEchoTest()", "Avg time per test (us): " + std::to_string(avgTime), 0);
-    LOG_INFOD("HyperCubeClient::doEchoTest()", "Avg bytes per test : " + std::to_string((int)avgBytes), 0);
-    LOG_INFOD("HyperCubeClient::doEchoTest()", "MBps: " + std::to_string(totalBPS), 0);
+ //   LOG_INFO("HyperCubeClient::doEchoTest()", "Avg time per test (us): " + std::to_string(avgTime), 0);
+ //   LOG_INFO("HyperCubeClient::doEchoTest()", "Avg bytes per test : " + std::to_string((int)avgBytes), 0);
+ //   LOG_INFO("HyperCubeClient::doEchoTest()", "MBps: " + std::to_string(totalBPS), 0);
     return true;
 }
 
