@@ -106,6 +106,7 @@ class HyperCubeClientCore : IHyperCubeClientCore
             bool alreadyWarnedOfFailedConnectionAttempt = false;
             int numFailedConnectionAttempts = 0;
             int numSuccessfullConnectionAttempts = 0;
+            ConnectionInfo connectionInfo;
 
             IHyperCubeClientCore* pIHyperCubeClientCore = 0;
             bool socketValid(void) { return pIHyperCubeClientCore->tcpSocketValid(); }
@@ -133,7 +134,7 @@ class HyperCubeClientCore : IHyperCubeClientCore
 
         public:
             uint64_t connectionId;
-            uuid_t applicationInstanceUUID;
+            //uuid_t applicationInstanceUUID;
 
             SignallingObject(IHyperCubeClientCore* _pIHyperCubeClientCore);
             void init(std::string _serverIpAddress);
@@ -143,6 +144,7 @@ class HyperCubeClientCore : IHyperCubeClientCore
             virtual bool onDisconnect(void);
             virtual bool onOpenForData(void);
             virtual bool onClosedForData(void);
+            void setConnectionInfo(const ConnectionInfo& rconnectionInfo) { connectionInfo = rconnectionInfo; }
         };
 
         virtual bool onConnect(void);
@@ -184,6 +186,7 @@ public:
         bool getPacket(Packet& packet);
 
         SOCKET getSocket(void) { return client.getSocket(); }
+        void setConnectionInfo(const ConnectionInfo& rconnectionInfo) { signallingObject.setConnectionInfo(rconnectionInfo); }
 };
 
 class HyperCubeClient : public HyperCubeClientCore

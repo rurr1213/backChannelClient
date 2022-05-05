@@ -12,9 +12,6 @@
 #include "clockGetTime.h"
 #include "MsgExt.h"
 
-#include "json.hpp"
-using json = nlohmann::json;
-
 using namespace std;
 
 #ifdef _WIN64
@@ -586,7 +583,7 @@ bool HyperCubeClientCore::SignallingObject::publish(void)
 
 bool HyperCubeClientCore::SignallingObject::sendConnectionInfo(std::string _connectionName)
 {
-    string command;
+/*
     char capplicationInstanceUUID[17];
     char* p = (char*)&applicationInstanceUUID;
     for (int i = 0; i < 16; i++) {
@@ -594,13 +591,14 @@ bool HyperCubeClientCore::SignallingObject::sendConnectionInfo(std::string _conn
     }
     capplicationInstanceUUID[16]=0;
     string sapplicationInstanceUUID = capplicationInstanceUUID;
+*/
+    json jconnectionInfo = connectionInfo.to_json();
     json j = {
-        { "command", "connectionInfo" },
-        { "connectionName", _connectionName },
-        { "applicationInstanceUUID", sapplicationInstanceUUID}
+        { "command", "ConnectionInfo" },
+        { "connectionInfo", jconnectionInfo }
     };
-    command = j.dump();
 
+    string command = j.dump();
     SigMsg signallingMsg(command);
     LOG_INFO("HyperCubeClientCore::sendConnectionInfo()", "", 0);
     return sendMsgOut(signallingMsg);
