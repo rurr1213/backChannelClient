@@ -594,7 +594,7 @@ bool HyperCubeClientCore::SignallingObject::sendConnectionInfo(std::string _conn
 */
     json jconnectionInfo = connectionInfo.to_json();
     json j = {
-        { "command", "ConnectionInfo" },
+        { "command", "connectionInfo" },
         { "connectionInfo", jconnectionInfo }
     };
 
