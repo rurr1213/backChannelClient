@@ -118,6 +118,12 @@ class HyperCubeClientCore : IHyperCubeClientCore
             bool sendMsgOut(Msg& msg) {
                 return pIHyperCubeClientCore->sendMsgOut(msg);
             }
+            bool sendCmdOut(HYPERCUBECOMMANDS command, CommonInfoBase& commonInfoBase, bool ack = false ) {
+                HyperCubeCommand hypeCubeCommand(command, commonInfoBase.to_json(), true);
+                hypeCubeCommand.ack = ack;
+                SigMsg signallingMsg(hypeCubeCommand.to_json().dump());
+                return sendMsgOut(signallingMsg);
+            }
             bool sendConnectionInfo(std::string _connectionName);
             bool createGroup(std::string _groupName);
             bool publish(void);
@@ -127,10 +133,10 @@ class HyperCubeClientCore : IHyperCubeClientCore
             bool remotePing(bool ack = false, std::string data = "remotePingFromMatrix");
             bool setupConnection(void);
 
-            bool onCreateGroupAck(const json& jsonData);
-            bool onConnectionInfoAck(const json& jsonData);
-            bool onRemotePing(const json& jsonData);
-            bool onEchoData(const json& jsonData);
+            bool onCreateGroupAck(HyperCubeCommand& hyperCubeCommand);
+            bool onConnectionInfoAck(HyperCubeCommand& hyperCubeCommand);
+            bool onRemotePing(HyperCubeCommand& hyperCubeCommand);
+            bool onEchoData(HyperCubeCommand& hyperCubeCommand);
 
         public:
             uint64_t connectionId;

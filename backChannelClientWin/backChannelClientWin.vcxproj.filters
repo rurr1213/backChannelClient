@@ -30,6 +30,9 @@
     <ClInclude Include="..\backChannelClient.h">
       <Filter>Source Files</Filter>
     </ClInclude>
+    <ClInclude Include="..\..\CommonCppDartCode\Messages\HyperCubeMessagesCommon.h">
+      <Filter>Source Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="backChannelClientWin.cpp">

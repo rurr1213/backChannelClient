@@ -356,11 +356,12 @@ bool HyperCubeClientCore::SignallingObject::isSignallingMsg(std::unique_ptr<Pack
     return sigMsg;
 }
 
-bool HyperCubeClientCore::SignallingObject::onConnectionInfoAck(const json& jsonData)
+bool HyperCubeClientCore::SignallingObject::onConnectionInfoAck(HyperCubeCommand& hyperCubeCommand)
 {
-    bool status = jsonData["status"];
-    std::string jsonDataString = jsonData.dump();
-    if (status) {
+    ConnectionInfoAck connectionInfoAck;
+    connectionInfoAck.from_json(hyperCubeCommand.getJsonData());
+    std::string jsonDataString = connectionInfoAck.to_json().dump();
+    if (hyperCubeCommand.status) {
         LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "onConnectionInfoAck, status:success", 0);
     }
     else {
@@ -369,11 +370,12 @@ bool HyperCubeClientCore::SignallingObject::onConnectionInfoAck(const json& json
     return true;
 }
 
-bool HyperCubeClientCore::SignallingObject::onCreateGroupAck(const json& jsonData)
+bool HyperCubeClientCore::SignallingObject::onCreateGroupAck(HyperCubeCommand& hyperCubeCommand)
 {
-    bool status = jsonData["status"];
-    std::string jsonDataString = jsonData.dump();
-    if (status) {
+    GroupInfo groupInfo;
+    groupInfo.from_json(hyperCubeCommand.getJsonData());
+    std::string jsonDataString = groupInfo.to_json().dump();
+    if (hyperCubeCommand.status) {
         LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "createGroupAck, status:success", 0);
     }
     else {
@@ -382,11 +384,10 @@ bool HyperCubeClientCore::SignallingObject::onCreateGroupAck(const json& jsonDat
     return true;
 }
 
-bool HyperCubeClientCore::SignallingObject::onRemotePing(const json& jsonData)
+bool HyperCubeClientCore::SignallingObject::onRemotePing(HyperCubeCommand& hyperCubeCommand)
 {
-    std::string pingData = jsonData["data"];
-    bool ack = jsonData["ack"];
-    if (ack) {
+    std::string pingData = hyperCubeCommand.getJsonData().dump();
+    if (hyperCubeCommand.ack) {
         LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "onRemotePing ack", 0);
     } else {
         LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "onRemotePing command", 0);
@@ -395,11 +396,11 @@ bool HyperCubeClientCore::SignallingObject::onRemotePing(const json& jsonData)
     return true;
 }
 
-bool HyperCubeClientCore::SignallingObject::onEchoData(const json& jsonData)
+bool HyperCubeClientCore::SignallingObject::onEchoData(HyperCubeCommand& hyperCubeCommand)
 {
-    std::string data = jsonData["data"];
+    std::string data = hyperCubeCommand.getJsonData().dump();
     bool status = echoData(data);
-    std::string jsonDataString = jsonData.dump();
+    std::string jsonDataString = hyperCubeCommand.getJsonData().dump();
     if (status) {
         LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "onEchoData, success", 0);
     }
@@ -419,49 +420,51 @@ bool HyperCubeClientCore::SignallingObject::processSigMsgJson(const Packet* ppac
     try {
         std::string logLineData = msgJson.jsonData;
         //        LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received " + line, 0);
-        std::string command = jsonData["command"];
-        if (command == "localPing") {
-            LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received LocalPing" + logLineData, 0);
-            msgProcessed = true;
-        }
-        if (command == "connectionInfo") {
-            onConnectionInfoAck(jsonData);
-            msgProcessed = true;
-        }
-        if (command == "createGroupAck") {
-            onCreateGroupAck(jsonData);
-            msgProcessed = true;
-        }
-        if (command == "echoData") {
-            onEchoData(jsonData);
-            msgProcessed = true;
-        }
-        if (command == "remotePing") {
-            onRemotePing(jsonData);
-            msgProcessed = true;
-        }
-        if (command == "subscribeAck") {
-            LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received subscribeAck" + logLineData, 0);
-            msgProcessed = true;
-        }
-        if (command == "unsubscribeAck") {
-            LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received unsubscribeAck" + logLineData, 0);
-            msgProcessed = true;
-        }
-        if (command == "subscriber") {
-            LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received subscriber" + logLineData, 0);
-            onOpenForData();
-            msgProcessed = true;
-        }
-        if (command == "unsubscriber") {
-            LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received unsubscriber" + logLineData, 0);
-            onClosedForData();
-            msgProcessed = true;
-        }
-        if (command == "closedForData") {
-            LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received onClosedForData" + logLineData, 0);
-            onClosedForData();
-            msgProcessed = true;
+        HyperCubeCommand hyperCubeCommand(HYPERCUBECOMMANDS::NONE, NULL, true);
+        hyperCubeCommand.from_json(jsonData);
+
+        switch (hyperCubeCommand.command) {
+            case HYPERCUBECOMMANDS::CONNECTIONINFOACK:
+                msgProcessed = onConnectionInfoAck(hyperCubeCommand);
+                break;
+            case HYPERCUBECOMMANDS::CREATEGROUPACK:
+                msgProcessed = onCreateGroupAck(hyperCubeCommand);
+                break;
+            case HYPERCUBECOMMANDS::SUBSCRIBEACK:
+                LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received subscribeAck" + logLineData, 0);
+                msgProcessed = true;
+                break;
+            case HYPERCUBECOMMANDS::UNSUBSCRIBEACK:
+                LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received unsubscribeAck" + logLineData, 0);
+                msgProcessed = true;
+                break;
+            case HYPERCUBECOMMANDS::SUBSCRIBER:
+                LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received subscriber" + logLineData, 0);
+                onOpenForData();
+                msgProcessed = true;
+                break;
+            case HYPERCUBECOMMANDS::UNSUBSCRIBER:
+                LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received unsubscriber" + logLineData, 0);
+                onClosedForData();
+                msgProcessed = true;
+                break;
+            case HYPERCUBECOMMANDS::CLOSEDFORDATA:
+                LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received onClosedForData" + logLineData, 0);
+                onClosedForData();
+                msgProcessed = true;
+                break;
+            case HYPERCUBECOMMANDS::ECHODATA:
+                msgProcessed = onEchoData(hyperCubeCommand);
+                break;
+            case HYPERCUBECOMMANDS::REMOTEPING:
+                msgProcessed = onRemotePing(hyperCubeCommand);
+                break;
+            case HYPERCUBECOMMANDS::LOCALPING:
+                LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "received LocalPing" + logLineData, 0);
+                msgProcessed = true;
+                break;
+            default:
+                break;
         }
     }
     catch (std::exception& e) {
@@ -517,105 +520,52 @@ bool HyperCubeClientCore::SignallingObject::setupConnection(void)
     return true;
 }
 
-
 bool HyperCubeClientCore::SignallingObject::echoData(std::string echoData)
 {
-    if (echoData.length() == 0) echoData = "echoDataData";
-    json j = {
-        { "command", "echoData" },
-        { "data", echoData }
-    };
-
-    string command = j.dump();
-    MsgCmd msgCmd(command);
     LOG_INFO("HyperCubeClientCore::echoData()", "", 0);
-    return sendMsgOut(msgCmd);
+    if (echoData.length() == 0) echoData = "echoDataData";
+    StringInfo stringInfo;
+    stringInfo.data = echoData;
+    return sendCmdOut(HYPERCUBECOMMANDS::ECHODATA, stringInfo);
 }
 
 bool HyperCubeClientCore::SignallingObject::localPing(bool ack, std::string data)
 {
-    json j = {
-        { "command", "localPing" },
-        { "ack", ack },
-        { "data", data }
-    };
-
-    string command = j.dump();
-    SigMsg msgCmd(command);
     LOG_INFO("HyperCubeClientCore::localPing()", "", 0);
-    return sendMsgOut(msgCmd);
+    StringInfo stringInfo;
+    stringInfo.data = data;
+    return sendCmdOut(HYPERCUBECOMMANDS::LOCALPING, stringInfo, ack);
 }
 
 bool HyperCubeClientCore::SignallingObject::remotePing(bool ack, std::string data)
 {
-    json j = {
-        { "command", "remotePing" },
-        { "ack", ack },
-        { "data", data }
-    };
-
-    string command = j.dump();
-    SigMsg msgCmd(command);
     LOG_INFO("HyperCubeClientCore::remotePing()", "", 0);
-    return sendMsgOut(msgCmd);
+    StringInfo stringInfo;
+    stringInfo.data = data;
+    return sendCmdOut(HYPERCUBECOMMANDS::REMOTEPING, stringInfo, ack);
 }
 
 
 bool HyperCubeClientCore::SignallingObject::publish(void)
 {
-    string command; 
-    uint64_t _groupId = 1;
-
-    json j = {
-        { "command", "publish" },
-        { "groupId", _groupId }
-    };
-
-    //cout << to_string(connectionId);
-    command = j.dump();
-
-    //cout << "Send Publish sid:" << to_string(connectionId) << " gid:" << to_string(_groupId) << "\n";
-
-    SigMsg signallingMsg(command);
     LOG_INFO("HyperCubeClientCore::publish()", "", 0);
-    return sendMsgOut(signallingMsg);
+    PublishInfo publishInfo;
+    publishInfo.publishData = "publish data!";
+    return sendCmdOut(HYPERCUBECOMMANDS::PUBLISHINFO, publishInfo);
 }
 
 bool HyperCubeClientCore::SignallingObject::sendConnectionInfo(std::string _connectionName)
 {
-/*
-    char capplicationInstanceUUID[17];
-    char* p = (char*)&applicationInstanceUUID;
-    for (int i = 0; i < 16; i++) {
-        capplicationInstanceUUID[i] = *p;
-    }
-    capplicationInstanceUUID[16]=0;
-    string sapplicationInstanceUUID = capplicationInstanceUUID;
-*/
-    json jconnectionInfo = connectionInfo.to_json();
-    json j = {
-        { "command", "connectionInfo" },
-        { "connectionInfo", jconnectionInfo }
-    };
-
-    string command = j.dump();
-    SigMsg signallingMsg(command);
     LOG_INFO("HyperCubeClientCore::sendConnectionInfo()", "", 0);
-    return sendMsgOut(signallingMsg);
+    return sendCmdOut(HYPERCUBECOMMANDS::CONNECTIONINFO, connectionInfo);
 }
 
 bool HyperCubeClientCore::SignallingObject::createGroup(std::string _groupName)
 {
-    string command;
-    json j = {
-        { "command", "createGroup" },
-        { "groupName", _groupName }
-    };
-    command = j.dump();
-
-    SigMsg signallingMsg(command);
     LOG_INFO("HyperCubeClientCore::createGroup()", "", 0);
-    return sendMsgOut(signallingMsg);
+    GroupInfo groupInfo;
+    groupInfo.groupName = _groupName;
+    return sendCmdOut(HYPERCUBECOMMANDS::CREATEGROUP, groupInfo);
 }
 
 bool HyperCubeClientCore::SignallingObject::subscribe(std::string _groupName)
