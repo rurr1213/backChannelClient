@@ -467,8 +467,8 @@ bool HyperCubeClientCore::SignallingObject::processSigMsgJson(const Packet* ppac
                 break;
         }
     }
-    catch (std::exception& e) {
-        LOG_WARNING("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "Failed to decode json" + std::string(e.what()), 0);
+    catch (...) {
+        LOG_WARNING("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "Failed to decode json", 0);
     }
     return msgProcessed;
 }
@@ -565,6 +565,7 @@ bool HyperCubeClientCore::SignallingObject::createGroup(std::string _groupName)
     LOG_INFO("HyperCubeClientCore::createGroup()", "", 0);
     GroupInfo groupInfo;
     groupInfo.groupName = _groupName;
+    groupInfo.creatorConnectionInfo = connectionInfo;
     return sendCmdOut(HYPERCUBECOMMANDS::CREATEGROUP, groupInfo);
 }
 
