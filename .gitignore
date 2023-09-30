@@ -31,7 +31,7 @@
 *.exe
 *.out
 *.app
+*.tlog
+*.log
 
-# Visual Studio 2015/2017 cache/options directory
-x64/
-
+backChannelClientWin/x64/
