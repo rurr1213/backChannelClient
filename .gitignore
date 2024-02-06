@@ -6,6 +6,7 @@
 *.lo
 *.o
 *.obj
+*.tlog
 
 # Precompiled Headers
 *.gch
@@ -30,7 +31,14 @@
 *.exe
 *.out
 *.app
+<<<<<<< HEAD
 *.tlog
 *.log
 
 backChannelClientWin/x64/
+=======
+
+# Visual Studio 2015/2017 cache/options directory
+x64/
+
+>>>>>>> f69eb8a (ignore these files)
