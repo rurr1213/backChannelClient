@@ -264,13 +264,25 @@ bool HyperCubeClientCore::SendActivity::onDisconnect(void)
 // ------------------------------------------------------------------------------------------------
 
 HyperCubeClientCore::SignallingObject::SignallingObject(IHyperCubeClientCore* _pIHyperCubeClientCore) :
-    pIHyperCubeClientCore{ _pIHyperCubeClientCore },
+    pIHyperCubeClientCore{ _pIHyperCubeClientCore }, connectionId{0},
     CstdThread(this)
 {};
 
-void HyperCubeClientCore::SignallingObject::init(std::string _serverIpAddress) 
+void HyperCubeClientCore::SignallingObject::init(std::string _serverName) 
 {
-    serverIpAddress = _serverIpAddress;
+    // lookup all addresses
+    bool stat = false;
+
+    // if a server name was given check this first
+    if (_serverName.length()>0)
+      stat = pIHyperCubeClientCore->tcpDnsLookup(_serverName, serverIpAddressPrimary);
+
+    // if not check setup default primary server IP
+    if (!stat) {
+        stat = pIHyperCubeClientCore->tcpDnsLookup(HYPERCUBE_SERVER_NAME_PRIMARY, serverIpAddressPrimary);
+    }
+    stat = pIHyperCubeClientCore->tcpDnsLookup(HYPERCUBE_SERVER_NAME_SECONDARY, serverIpAddressSecondary);
+
     if (!isStarted()) {
         CstdThread::init(true);
         eventDisconnectedFromServer.reset();
@@ -310,9 +322,9 @@ bool HyperCubeClientCore::SignallingObject::connectIfNotConnected(void)
             justDisconnected = false;
         }
         stat = connect();
-        LOG_STATESTRING("HyperCubeClientCore-ServerIP", serverIpAddress);
+        LOG_STATESTRING("HyperCubeClientCore-ServerIP", serverIpAddressActive);
         if (stat) {
-            LOG_INFO("HyperCubeClientCore::connectIfNotConnected()", "connected to " + serverIpAddress, 0);
+            LOG_INFO("HyperCubeClientCore::connectIfNotConnected()", "connected to " + serverIpAddressActive, 0);
             pIHyperCubeClientCore->onConnect();
             setupConnection();
             connected = true;
@@ -322,7 +334,7 @@ bool HyperCubeClientCore::SignallingObject::connectIfNotConnected(void)
             LOG_STATESTRING("HyperCubeClientCore-state", "disconnected");
             LOG_STATEINT("HyperCubeClientCore-NumFailedConnectionAttempts", ++numFailedConnectionAttempts);
             if (!alreadyWarnedOfFailedConnectionAttempt) {
-                LOG_WARNING("HyperCubeClientCore::connectIfNotConnected()", "connection failed to " + serverIpAddress, 0);
+                LOG_WARNING("HyperCubeClientCore::connectIfNotConnected()", "connection failed to " + serverIpAddressActive, 0);
                 alreadyWarnedOfFailedConnectionAttempt = true;
             }
         }
@@ -475,7 +487,12 @@ bool HyperCubeClientCore::SignallingObject::processSigMsgJson(const Packet* ppac
 
 bool HyperCubeClientCore::SignallingObject::connect(void)
 {
-    bool stat = pIHyperCubeClientCore->tcpConnect(serverIpAddress, SERVER_PORT);
+    serverIpAddressActive = serverIpAddressPrimary;
+    bool stat = pIHyperCubeClientCore->tcpConnect(serverIpAddressActive, SERVER_PORT);
+    if (!stat) {
+        serverIpAddressActive = serverIpAddressSecondary;
+        stat = pIHyperCubeClientCore->tcpConnect(serverIpAddressActive, SERVER_PORT);
+    }
     return stat;
 }
 
@@ -557,6 +574,7 @@ bool HyperCubeClientCore::SignallingObject::publish(void)
 bool HyperCubeClientCore::SignallingObject::sendConnectionInfo(std::string _connectionName)
 {
     LOG_INFO("HyperCubeClientCore::sendConnectionInfo()", "", 0);
+    connectionInfo.serverIpAddress = serverIpAddressActive;
     return sendCmdOut(HYPERCUBECOMMANDS::CONNECTIONINFO, connectionInfo);
 }
 
@@ -599,11 +617,11 @@ HyperCubeClientCore::~HyperCubeClientCore() {
 
 };
 
-bool HyperCubeClientCore::init(std::string _serverIpAddress, bool reInit)
+bool HyperCubeClientCore::init(std::string _serverName, bool reInit)
 {
     receiveActivity.init();
     sendActivity.init();
-    signallingObject.init(_serverIpAddress);
+    signallingObject.init(_serverName);
     return true;
 }
 

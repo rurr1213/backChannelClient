@@ -18,9 +18,9 @@ BackChannelClient::~BackChannelClient()
 {
 }
 
-bool BackChannelClient::init(std::string serverIpAddress, bool reInit)
+bool BackChannelClient::init(std::string serverName, bool reInit)
 {
-	HyperCubeClient::init(serverIpAddress, reInit);
+	HyperCubeClient::init(serverName, reInit);
 	return true;
 }
 

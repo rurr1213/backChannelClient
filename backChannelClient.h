@@ -8,7 +8,7 @@ class BackChannelClient : public HyperCubeClient
 public:
 	BackChannelClient();
 	~BackChannelClient();
-	bool init(std::string serverIpAddress = BACKCHANNEL_DEFAULT_SERVER_IP, bool reInit = false);
+	bool init(std::string serverName, bool reInit = false);
 	bool setIP(std::string ipAddress);
 	bool deinit(void);
 };

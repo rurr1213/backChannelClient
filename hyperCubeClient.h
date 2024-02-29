@@ -7,6 +7,10 @@
 #include "mserdes.h"
 #include "Packet.h"
 
+#define HYPERCUBE_SERVER_NAME_PRIMARY "primary.hyperkube.net"
+#define HYPERCUBE_SERVER_NAME_SECONDARY "secondary.hyperkube.net"
+#define HYPERCUBE_SERVER_PORT 5054
+
 #define HYPERCUBE_CONNECTIONINTERVAL_MS 8000			// connection attempt interval in milliseconds
 
 #ifdef _WIN64
@@ -25,6 +29,7 @@ public:
 //    virtual bool tcpClose(void) { return rtcpClient.close(); }
     virtual bool tcpConnect(std::string addrString, int port) { return rtcpClient.connect(addrString, port); }
     virtual bool tcpSocketValid(void) { return rtcpClient.socketValid(); }
+    virtual bool tcpDnsLookup(std::string _hostName, std::string& _ipAddress) { return rtcpClient.dnsLookup(_hostName, _ipAddress); }
     virtual int tcpGetSocket(void) { return (int)rtcpClient.getSocket(); }
     int tcpRecv(char* buf, const int bufSize) { return rtcpClient.recv(buf, bufSize); }
     int tcpSend(const char* buf, const int bufSize) { return rtcpClient.send(buf, bufSize); }
@@ -111,7 +116,9 @@ class HyperCubeClientCore : IHyperCubeClientCore
             IHyperCubeClientCore* pIHyperCubeClientCore = 0;
             bool socketValid(void) { return pIHyperCubeClientCore->tcpSocketValid(); }
             bool connect(void);
-            std::string serverIpAddress;
+            std::string serverIpAddressPrimary;
+            std::string serverIpAddressSecondary;
+            std::string serverIpAddressActive;    
             bool connectIfNotConnected(void);
             bool processSigMsgJson(const Packet* ppacket);
             bool threadFunction(void);
@@ -143,14 +150,16 @@ class HyperCubeClientCore : IHyperCubeClientCore
             //uuid_t applicationInstanceUUID;
 
             SignallingObject(IHyperCubeClientCore* _pIHyperCubeClientCore);
-            void init(std::string _serverIpAddress);
+            void init(std::string _serverName);
             void deinit(void);
             virtual bool isSignallingMsg(std::unique_ptr<Packet>& rppacket);
             virtual bool onConnect(void);
             virtual bool onDisconnect(void);
             virtual bool onOpenForData(void);
             virtual bool onClosedForData(void);
-            void setConnectionInfo(const ConnectionInfo& rconnectionInfo) { connectionInfo = rconnectionInfo; }
+            void setConnectionInfo(const ConnectionInfo& rconnectionInfo) { 
+                connectionInfo = rconnectionInfo; 
+            }
         };
 
         virtual bool onConnect(void);
@@ -167,7 +176,7 @@ protected:
 
         Ctcp::Client client;
 
-        static const int SERVER_PORT = 5054;
+        static const int SERVER_PORT = HYPERCUBE_SERVER_PORT;
 
         MSerDes mserdes;
 
@@ -184,7 +193,7 @@ public:
         HyperCubeClientCore();
         ~HyperCubeClientCore();
 
-        bool init(std::string _serverIpAddress, bool reInit = true);
+        bool init(std::string serverName = HYPERCUBE_SERVER_NAME_PRIMARY, bool reInit = true);
         bool deinit(void);
 
         virtual bool connectionClosed(void) { return true; };
