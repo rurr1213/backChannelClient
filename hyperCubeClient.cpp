@@ -391,7 +391,7 @@ bool HyperCubeClientCore::SignallingObject::onCreateGroupAck(HyperCubeCommand& h
         LOG_INFO("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "createGroupAck, status:success", 0);
     }
     else {
-        LOG_WARNING("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "createGroupAck status:Failed - Duplicate name? " + jsonDataString, 0);
+        LOG_NOTE("HyperCubeClientCore::SignallingObject::processSigMsgJson()", "createGroupAck status:Failed - Duplicate name? " + jsonDataString, 0);
     }
     return true;
 }
@@ -531,7 +531,7 @@ bool HyperCubeClientCore::SignallingObject::setupConnection(void)
 {
     //sendEcho();
     sendConnectionInfo("Matrix");
-    createGroup("TeamPegasus");
+    createDefaultGroup();
     localPing();
     LOG_INFO("HyperCubeClientCore::SignallingObject::setupConnection()", "done setup", 0);
     return true;
@@ -585,6 +585,21 @@ bool HyperCubeClientCore::SignallingObject::createGroup(std::string _groupName)
     groupInfo.groupName = _groupName;
     groupInfo.creatorConnectionInfo = connectionInfo;
     return sendCmdOut(HYPERCUBECOMMANDS::CREATEGROUP, groupInfo);
+}
+
+bool HyperCubeClientCore::SignallingObject::createGroup(const GroupInfo& _rgroupInfo)
+{
+    LOG_INFO("HyperCubeClientCore::createGroup()", "", 0);
+    GroupInfo groupInfo = _rgroupInfo;
+    groupInfo.creatorConnectionInfo = connectionInfo;
+    return sendCmdOut(HYPERCUBECOMMANDS::CREATEGROUP, groupInfo);
+}
+
+bool HyperCubeClientCore::SignallingObject::createDefaultGroup(void)
+{
+    LOG_INFO("HyperCubeClientCore::createDefaultGroup()", "", 0);
+    defaultGroupInfo.creatorConnectionInfo = connectionInfo;
+    return sendCmdOut(HYPERCUBECOMMANDS::CREATEGROUP, defaultGroupInfo);
 }
 
 bool HyperCubeClientCore::SignallingObject::subscribe(std::string _groupName)

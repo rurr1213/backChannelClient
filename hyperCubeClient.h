@@ -112,6 +112,7 @@ class HyperCubeClientCore : IHyperCubeClientCore
             int numFailedConnectionAttempts = 0;
             int numSuccessfullConnectionAttempts = 0;
             ConnectionInfo connectionInfo;
+            GroupInfo defaultGroupInfo;
 
             IHyperCubeClientCore* pIHyperCubeClientCore = 0;
             bool socketValid(void) { return pIHyperCubeClientCore->tcpSocketValid(); }
@@ -133,6 +134,8 @@ class HyperCubeClientCore : IHyperCubeClientCore
             }
             bool sendConnectionInfo(std::string _connectionName);
             bool createGroup(std::string _groupName);
+            bool createGroup(const GroupInfo& _rgroupName);
+            bool createDefaultGroup(void);
             bool publish(void);
             bool subscribe(std::string _groupName);
             bool echoData(std::string data = "");
@@ -157,9 +160,8 @@ class HyperCubeClientCore : IHyperCubeClientCore
             virtual bool onDisconnect(void);
             virtual bool onOpenForData(void);
             virtual bool onClosedForData(void);
-            void setConnectionInfo(const ConnectionInfo& rconnectionInfo) { 
-                connectionInfo = rconnectionInfo; 
-            }
+            void setConnectionInfo(const ConnectionInfo& rconnectionInfo) { connectionInfo = rconnectionInfo; }
+            void setDefaultGroupInfo(const GroupInfo& rgroupInfo) { defaultGroupInfo = rgroupInfo; }
         };
 
         virtual bool onConnect(void);
@@ -202,6 +204,7 @@ public:
 
         SOCKET getSocket(void) { return client.getSocket(); }
         void setConnectionInfo(const ConnectionInfo& rconnectionInfo) { signallingObject.setConnectionInfo(rconnectionInfo); }
+        void setDefaultGroupInfo(const GroupInfo& rgroupInfo) { signallingObject.setDefaultGroupInfo(rgroupInfo); }
 };
 
 class HyperCubeClient : public HyperCubeClientCore
